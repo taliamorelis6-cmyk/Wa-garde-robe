@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wa — Ta garde-robe numérique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500;1,9..144,600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- ============================================================
+     FIREBASE — SDK compat (simple à utiliser sans outils de build)
+     ============================================================ -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --cream:#FBF6F2;
+    --cream-deep:#F3EAE4;
+    --ink:#2B1620;
+    --ink-soft:#6B4C56;
+    --raspberry:#D42A5D;
+    --raspberry-dark:#AD2049;
+    --blush:#F6D7E1;
+    --blush-soft:#FBEAEF;
+    --plum:#3A1526;
+    --line:#E7D9D2;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Work Sans',sans-serif;
+    background:var(--cream);
+    color:var(--ink);
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  .screen{
+    width:360px;
+    max-width:100%;
+    display:none;
+    flex-direction:column;
+  }
+  .screen.active{ display:flex; }
+
+  /* ---- ACCUEIL / AUTH ---- */
+  #screen-accueil{ align-items:center; text-align:center; padding:20px; }
+  .logo{
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    font-weight:600;
+    font-size:4rem;
+    color:var(--raspberry);
+    margin:0;
+    line-height:1;
+  }
+  .tagline{ font-size:0.95rem; color:var(--ink-soft); margin:10px 0 30px; }
+  .auth-toggle{
+    display:flex;
+    background:var(--blush-soft);
+    border-radius:100px;
+    padding:4px;
+    margin-bottom:22px;
+    width:100%;
+  }
+  .auth-toggle button{
+    flex:1;
+    border:none;
+    background:transparent;
+    text-align:center;
+    padding:9px 0;
+    font-family:'Work Sans',sans-serif;
+    font-size:0.85rem;
+    font-weight:600;
+    border-radius:100px;
+    color:var(--ink-soft);
+    cursor:pointer;
+  }
+  .auth-toggle button.on{ background:#fff; color:var(--raspberry-dark); box-shadow:0 2px 6px rgba(58,21,38,0.08);}
+  .field{ width:100%; text-align:left; margin-bottom:14px; }
+  .field label{ display:block; font-size:0.72rem; color:var(--ink-soft); margin-bottom:5px; font-weight:600; }
+  .field input{
+    width:100%; border:1px solid var(--line); background:#fff; border-radius:12px;
+    padding:12px 14px; font-family:'Work Sans',sans-serif; font-size:0.9rem; color:var(--ink);
+  }
+  .field input:focus{ outline:none; border-color:var(--raspberry); }
+  .cta{
+    width:100%; border:none; background:var(--raspberry); color:#fff;
+    font-family:'Work Sans',sans-serif; font-weight:600; font-size:0.95rem;
+    padding:14px; border-radius:12px; margin-top:6px; cursor:pointer;
+  }
+  .cta:disabled{ opacity:0.6; cursor:default; }
+  .cta.secondary{ background:#fff; color:var(--raspberry-dark); border:1px solid var(--line); margin-top:10px; }
+  .msg{ font-size:0.78rem; margin-top:12px; min-height:16px; }
+  .msg.error{ color:var(--raspberry-dark); }
+  .msg.info{ color:var(--ink-soft); }
+
+  /* ---- PLACEHOLDER APRES CONNEXION ---- */
+  #screen-app{ align-items:center; text-align:center; padding:20px; }
+  #screen-app .welcome{
+    font-family:'Fraunces',serif; font-style:italic; font-size:1.3rem; color:var(--plum);
+    margin:16px 0 6px;
+  }
+  #screen-app .pseudo-label{ font-size:0.85rem; color:var(--ink-soft); margin-bottom:24px; }
+  .note-box{
+    background:var(--blush-soft); border-radius:14px; padding:16px; font-size:0.78rem;
+    color:var(--ink-soft); line-height:1.5; text-align:left; margin-bottom:20px;
+  }
+
+  /* ---- APP SHELL (écrans réels après connexion) ---- */
+  .app-shell{ min-height:80vh; width:100%; flex-direction:column; }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; padding:0 0 14px; width:100%; }
+  .icon-btn{
+    width:38px; height:38px; border-radius:50%; background:#fff; border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    box-shadow:0 2px 6px rgba(58,21,38,0.06); flex-shrink:0;
+  }
+  .icon-btn.filled{ background:var(--raspberry); border-color:var(--raspberry); }
+  .icon-btn svg{ width:18px; height:18px; }
+  .screen-title{ font-family:'Fraunces',serif; font-style:italic; font-size:1.1rem; color:var(--plum); }
+
+  .photo-stack{ flex:1; display:flex; flex-direction:column; gap:12px; padding:2px 0; overflow-y:auto; min-height:200px; }
+  .photo-row{ display:flex; align-items:center; gap:8px; }
+  .arrow-side{
+    width:34px; height:34px; border-radius:50%; background:#fff; border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
+    box-shadow:0 2px 6px rgba(58,21,38,0.06);
+  }
+  .arrow-side svg{ width:14px; height:14px; }
+  .photo-frame{
+    flex:1; height:128px; background:var(--blush-soft); border:1px solid var(--line); border-radius:16px;
+    position:relative; display:flex; align-items:center; justify-content:center; overflow:hidden; cursor:pointer;
+  }
+  .photo-frame img{ width:100%; height:100%; object-fit:cover; }
+  .photo-placeholder{ display:flex; flex-direction:column; align-items:center; gap:6px; color:var(--raspberry-dark); opacity:0.65; }
+  .photo-placeholder svg{ width:22px; height:22px; }
+  .photo-placeholder span{ font-size:0.62rem; font-weight:600; text-align:center; padding:0 10px; }
+  .photo-caption{
+    position:absolute; left:8px; bottom:8px; background:rgba(255,255,255,0.9);
+    padding:3px 9px; border-radius:100px; font-size:0.66rem; font-weight:600; color:var(--plum);
+  }
+
+  .bottombar{ display:flex; align-items:center; justify-content:space-between; padding:14px 0 0; width:100%; }
+  .fab{
+    width:54px; height:54px; border-radius:50%; background:var(--raspberry); border:none;
+    display:flex; align-items:center; justify-content:center; box-shadow:0 8px 18px rgba(212,42,93,0.4);
+    cursor:pointer; margin-top:-26px;
+  }
+  .fab svg{ width:22px; height:22px; }
+
+  .cat-chip-big{
+    align-self:flex-start; margin:0 0 14px; background:var(--blush-soft); color:var(--raspberry-dark);
+    font-weight:700; font-size:0.8rem; padding:7px 16px; border-radius:100px;
+  }
+  .upload-zone{
+    margin:0 0 14px; border:2px dashed var(--line); border-radius:16px; padding:16px;
+    display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; cursor:pointer;
+    position:relative; overflow:hidden; width:100%;
+  }
+  .upload-zone input[type=file]{ position:absolute; inset:0; opacity:0; cursor:pointer; }
+  .upload-zone img.preview{ max-width:100%; max-height:80px; border-radius:10px; margin-top:4px; }
+  .upload-zone svg{ width:24px; height:24px; }
+  .upload-zone .up-title{ font-weight:700; font-size:0.85rem; }
+  .upload-zone .up-sub{ font-size:0.68rem; color:var(--ink-soft); }
+
+  .empty-note{ text-align:center; color:var(--ink-soft); font-size:0.8rem; padding:20px 10px; line-height:1.5; }
+  .look-count{
+    text-align:center; font-family:'Fraunces',serif; font-style:italic; font-size:1.3rem;
+    color:var(--plum); margin:26px 0 4px;
+  }
+</style>
+</head>
+<body>
+
+  <!-- ============ ECRAN ACCUEIL / CONNEXION-INSCRIPTION ============ -->
+  <div class="screen active" id="screen-accueil">
+    <p class="logo">Wa</p>
+    <p class="tagline">Ta garde-robe, à portée de main</p>
+
+    <div class="auth-toggle">
+      <button id="tab-login" class="on" onclick="switchAuthMode('login')">Se connecter</button>
+      <button id="tab-signup" onclick="switchAuthMode('signup')">Créer un compte</button>
+    </div>
+
+    <div class="field">
+      <label>Pseudo</label>
+      <input type="text" id="input-pseudo" placeholder="ex. lucie.style" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>Mot de passe</label>
+      <input type="password" id="input-password" placeholder="6 caractères minimum" autocomplete="current-password">
+    </div>
+
+    <button class="cta" id="btn-submit" onclick="submitAuth()">Se connecter</button>
+    <p class="msg" id="auth-msg"></p>
+  </div>
+
+  <!-- ============ HABILLAGE ============ -->
+  <div class="screen app-shell" id="screen-habillage">
+    <div class="topbar">
+      <div class="icon-btn" onclick="showScreen('screen-reglages')" title="Réglages">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg>
+      </div>
+      <span class="screen-title" id="habillage-pseudo"></span>
+      <div class="icon-btn filled" onclick="saveLook(this)" title="Enregistrer le look">
+        <svg viewBox="0 0 24 24" fill="#fff" stroke="#fff" stroke-width="1.5"><path d="M12 21s-7.5-4.9-10-9.3C.4 8.3 2 4.5 5.6 4c2-.3 3.9.6 4.9 2.2C11.5 4.6 13.4 3.7 15.4 4c3.6.5 5.2 4.3 3.6 7.7C16.5 16.1 12 21 12 21z"/></svg>
+      </div>
+    </div>
+
+    <div class="photo-stack" id="photo-stack"></div>
+
+    <div class="bottombar">
+      <div class="icon-btn" onclick="showScreen('screen-armoire')" title="Nombre de catégories (à venir dans les réglages)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4"/><rect x="3" y="10" width="18" height="4"/><rect x="3" y="16" width="18" height="4"/></svg>
+      </div>
+      <button class="fab" onclick="openAddScreen()" title="Ajouter un vêtement">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <div class="icon-btn" onclick="showScreen('screen-armoire')" title="Consulter l'armoire">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16"/><path d="M12 4v16"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ AJOUTER UN VETEMENT ============ -->
+  <div class="screen app-shell" id="screen-ajouter">
+    <div class="topbar">
+      <div class="icon-btn" onclick="showScreen('screen-habillage')" title="Retour">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </div>
+      <span class="screen-title">Nouveau vêtement</span>
+      <span style="width:38px;"></span>
+    </div>
+
+    <span class="cat-chip-big" id="ajouter-cat-chip">Catégorie</span>
+
+    <label class="upload-zone" style="border-color:#D42A5D;">
+      <input type="file" accept="image/*" id="input-photo-portee" onchange="previewUpload(this,'preview-portee')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#D42A5D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 6l1.5-2h5L16 6"/></svg>
+      <span class="up-title" style="color:#AD2049;">Photo portée</span>
+      <span class="up-sub">Toi qui portes le vêtement</span>
+      <img class="preview" id="preview-portee" style="display:none;">
+    </label>
+
+    <label class="upload-zone">
+      <input type="file" accept="image/*" id="input-photo-plat" onchange="previewUpload(this,'preview-plat')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 6l1.5-2h5L16 6"/></svg>
+      <span class="up-title">Photo à plat</span>
+      <span class="up-sub">Le vêtement seul, fond uni clair</span>
+      <img class="preview" id="preview-plat" style="display:none;">
+    </label>
+
+    <div class="field">
+      <label>Nom (optionnel)</label>
+      <input type="text" id="input-nom-vetement" placeholder="ex. Chemise blanche">
+    </div>
+
+    <button class="cta" id="btn-ajouter-submit" onclick="submitNewVetement()">Ajouter</button>
+    <p class="msg" id="ajouter-msg"></p>
+  </div>
+
+  <!-- ============ ARMOIRE (compteur pour l'instant, magazine à la prochaine étape) ============ -->
+  <div class="screen app-shell" id="screen-armoire" style="align-items:center;">
+    <div class="topbar">
+      <div class="icon-btn" onclick="showScreen('screen-habillage')" title="Retour">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </div>
+      <span class="screen-title">Armoire</span>
+      <span style="width:38px;"></span>
+    </div>
+    <p class="look-count" id="look-count">…</p>
+    <p class="empty-note">L'affichage façon magazine (un look par page, compteurs par catégorie) arrive à la prochaine étape — ce chiffre confirme juste que tes looks sont bien enregistrés dans Firestore.</p>
+  </div>
+
+  <!-- ============ REGLAGES (placeholder pour l'instant) ============ -->
+  <div class="screen app-shell" id="screen-reglages" style="align-items:center;">
+    <div class="topbar">
+      <div class="icon-btn" onclick="showScreen('screen-habillage')" title="Retour">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </div>
+      <span class="screen-title">Réglages</span>
+      <span style="width:38px;"></span>
+    </div>
+    <p class="empty-note">Le thème de couleurs, le Mode Mémère, la gestion des catégories et le nombre de catégories affichées arriveront ici à une prochaine étape.</p>
+    <button class="cta secondary" onclick="logout()">Se déconnecter</button>
+  </div>
+
+<script>
+  // ============================================================
+  // 🔧 A REMPLIR : colle ici le firebaseConfig fourni par la console
+  // Firebase (Paramètres du projet > Vos applications > Web).
+  // Ce sont des identifiants publics, sans risque à laisser dans le code.
+  // ============================================================
+  const firebaseConfig = {
+    apiKey: "AIzaSyAzouCam1IBm2YRyyZcKvSWHrjpjgOEFRM",
+    authDomain: "wa-garde--robe-virtuelle.firebaseapp.com",
+    projectId: "wa-garde--robe-virtuelle",
+    storageBucket: "wa-garde--robe-virtuelle.firebasestorage.app",
+    messagingSenderId: "438425479841",
+    appId: "1:438425479841:web:17af5a3d00e167fad21ee0"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  // Session persistante : reste connectée même après fermeture du navigateur
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+  let authMode = 'login'; // 'login' ou 'signup'
+
+  function switchAuthMode(mode){
+    authMode = mode;
+    document.getElementById('tab-login').classList.toggle('on', mode==='login');
+    document.getElementById('tab-signup').classList.toggle('on', mode==='signup');
+    document.getElementById('btn-submit').textContent = (mode==='login') ? 'Se connecter' : 'Créer mon compte';
+    document.getElementById('auth-msg').textContent = '';
+  }
+
+  // Transforme le pseudo en "faux email" utilisable par Firebase Auth,
+  // pour que l'utilisatrice n'ait jamais à voir/taper d'adresse email.
+  function pseudoToEmail(pseudo){
+    const clean = pseudo.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+    return clean + '@wa-app.local';
+  }
+
+  function setMsg(text, type){
+    const el = document.getElementById('auth-msg');
+    el.textContent = text;
+    el.className = 'msg ' + (type || '');
+  }
+
+  function submitAuth(){
+    const pseudo = document.getElementById('input-pseudo').value.trim();
+    const password = document.getElementById('input-password').value;
+    const btn = document.getElementById('btn-submit');
+
+    if(!pseudo || !password){
+      setMsg('Merci de remplir le pseudo et le mot de passe.', 'error');
+      return;
+    }
+    if(password.length < 6){
+      setMsg('Le mot de passe doit faire au moins 6 caractères.', 'error');
+      return;
+    }
+
+    const email = pseudoToEmail(pseudo);
+    btn.disabled = true;
+    setMsg('Un instant...', 'info');
+
+    const action = (authMode === 'login')
+      ? auth.signInWithEmailAndPassword(email, password)
+      : auth.createUserWithEmailAndPassword(email, password);
+
+    action
+      .then((cred) => {
+        // A l'inscription, on enregistre le pseudo "propre" dans Firestore
+        if(authMode === 'signup'){
+          return db.collection('utilisatrices').doc(cred.user.uid).set({
+            pseudo: pseudo,
+            creeLe: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        }
+      })
+      .catch((err) => {
+        btn.disabled = false;
+        setMsg(traduireErreur(err.code), 'error');
+      });
+  }
+
+  function traduireErreur(code){
+    switch(code){
+      case 'auth/email-already-in-use': return 'Ce pseudo est déjà pris.';
+      case 'auth/invalid-email': return 'Ce pseudo contient des caractères non autorisés.';
+      case 'auth/user-not-found': return 'Aucun compte avec ce pseudo.';
+      case 'auth/wrong-password': return 'Mot de passe incorrect.';
+      case 'auth/invalid-credential': return 'Pseudo ou mot de passe incorrect.';
+      case 'auth/weak-password': return 'Mot de passe trop faible (6 caractères minimum).';
+      default: return "Une erreur est survenue (" + code + ").";
+    }
+  }
+
+  const ARROW_LEFT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>';
+  const ARROW_RIGHT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>';
+  const PLUS_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+  const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l6 6L20 6"/></svg>';
+  const HEART_SVG = '<svg viewBox="0 0 24 24" fill="#fff" stroke="#fff" stroke-width="1.5"><path d="M12 21s-7.5-4.9-10-9.3C.4 8.3 2 4.5 5.6 4c2-.3 3.9.6 4.9 2.2C11.5 4.6 13.4 3.7 15.4 4c3.6.5 5.2 4.3 3.6 7.7C16.5 16.1 12 21 12 21z"/></svg>';
+
+  const DEFAULT_CATEGORIES = ['Coiffures','Hauts','Bas','Chaussures'];
+
+  let currentUid = null;
+  let categories = [];        // [{id, nom, ordre}]
+  let itemsByCategory = {};   // catId -> [{id, nom, photoPorteeURL, photoPlatURL}]
+  let indexByCategory = {};   // catId -> index affiché actuellement
+  let pendingCategoryForAdd = null;
+
+  async function ensureDefaultCategories(uid){
+    const snap = await db.collection('utilisatrices').doc(uid).collection('categories').get();
+    if(!snap.empty) return;
+    const batch = db.batch();
+    DEFAULT_CATEGORIES.forEach((nom, i) => {
+      const ref = db.collection('utilisatrices').doc(uid).collection('categories').doc();
+      batch.set(ref, { nom, ordre: i });
+    });
+    await batch.commit();
+  }
+
+  async function loadCategoriesAndItems(uid){
+    const catSnap = await db.collection('utilisatrices').doc(uid).collection('categories').orderBy('ordre').get();
+    categories = catSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    const itemSnap = await db.collection('utilisatrices').doc(uid).collection('vetements').get();
+    itemsByCategory = {};
+    itemSnap.docs.forEach(d => {
+      const data = { id:d.id, ...d.data() };
+      if(!itemsByCategory[data.categorieId]) itemsByCategory[data.categorieId] = [];
+      itemsByCategory[data.categorieId].push(data);
+    });
+
+    categories.forEach(c => { if(indexByCategory[c.id] === undefined) indexByCategory[c.id] = 0; });
+  }
+
+  function renderHabillage(){
+    const stack = document.getElementById('photo-stack');
+    stack.innerHTML = '';
+    categories.forEach(cat => {
+      const items = itemsByCategory[cat.id] || [];
+      const idx = indexByCategory[cat.id] || 0;
+      const item = items[idx];
+
+      const row = document.createElement('div');
+      row.className = 'photo-row';
+
+      const leftBtn = document.createElement('div');
+      leftBtn.className = 'arrow-side';
+      leftBtn.innerHTML = ARROW_LEFT_SVG;
+      leftBtn.onclick = () => cycleItem(cat.id, -1);
+
+      const frame = document.createElement('div');
+      frame.className = 'photo-frame';
+      if(item){
+        const url = item.photoPorteeURL || item.photoPlatURL;
+        frame.innerHTML = '<img src="'+url+'" alt=""><span class="photo-caption">'+cat.nom+' · '+(item.nom || 'Sans nom')+'</span>';
+      } else {
+        frame.innerHTML = '<div class="photo-placeholder">'+PLUS_ICON_SVG+'<span>Ajoute une photo dans '+cat.nom+'</span></div>';
+        frame.onclick = () => openAddScreen(cat.id);
+      }
+
+      const rightBtn = document.createElement('div');
+      rightBtn.className = 'arrow-side';
+      rightBtn.innerHTML = ARROW_RIGHT_SVG;
+      rightBtn.onclick = () => cycleItem(cat.id, 1);
+
+      row.appendChild(leftBtn); row.appendChild(frame); row.appendChild(rightBtn);
+      stack.appendChild(row);
+    });
+  }
+
+  function cycleItem(catId, dir){
+    const items = itemsByCategory[catId] || [];
+    if(items.length === 0) return;
+    let idx = indexByCategory[catId] || 0;
+    idx = (idx + dir + items.length) % items.length;
+    indexByCategory[catId] = idx;
+    renderHabillage();
+  }
+
+  function openAddScreen(catId){
+    pendingCategoryForAdd = catId || (categories[0] && categories[0].id);
+    const cat = categories.find(c => c.id === pendingCategoryForAdd);
+    document.getElementById('ajouter-cat-chip').textContent = 'Catégorie : ' + (cat ? cat.nom : '');
+    document.getElementById('input-photo-portee').value = '';
+    document.getElementById('input-photo-plat').value = '';
+    document.getElementById('input-nom-vetement').value = '';
+    document.getElementById('preview-portee').style.display = 'none';
+    document.getElementById('preview-plat').style.display = 'none';
+    document.getElementById('ajouter-msg').textContent = '';
+    showScreen('screen-ajouter');
+  }
+
+  function previewUpload(input, imgId){
+    const img = document.getElementById(imgId);
+    if(input.files && input.files[0]){
+      img.src = URL.createObjectURL(input.files[0]);
+      img.style.display = 'block';
+    }
+  }
+
+  // Compresse une photo côté navigateur et la renvoie en chaîne "data URL"
+  // (image directement stockable dans un champ Firestore, sans passer par
+  // Firebase Storage — donc sans forfait payant ni carte bancaire requise).
+  function compressImageToDataURL(file, maxDim, quality){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          let w = img.width, h = img.height;
+          if(w > h && w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; }
+          else if(h >= w && h > maxDim){ w = Math.round(w * maxDim / h); h = maxDim; }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function submitNewVetement(){
+    const fPortee = document.getElementById('input-photo-portee').files[0];
+    const fPlat = document.getElementById('input-photo-plat').files[0];
+    const nom = document.getElementById('input-nom-vetement').value.trim();
+    const msg = document.getElementById('ajouter-msg');
+    const btn = document.getElementById('btn-ajouter-submit');
+
+    if(!fPortee && !fPlat){
+      msg.textContent = 'Ajoute au moins une photo.';
+      msg.className = 'msg error';
+      return;
+    }
+
+    btn.disabled = true;
+    msg.textContent = 'Enregistrement en cours...';
+    msg.className = 'msg info';
+
+    try{
+      const ref = db.collection('utilisatrices').doc(currentUid).collection('vetements').doc();
+      const data = {
+        categorieId: pendingCategoryForAdd,
+        nom: nom || null,
+        creeLe: firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      if(fPortee) data.photoPorteeURL = await compressImageToDataURL(fPortee, 700, 0.65);
+      if(fPlat) data.photoPlatURL = await compressImageToDataURL(fPlat, 700, 0.65);
+
+      await ref.set(data);
+      await loadCategoriesAndItems(currentUid);
+      btn.disabled = false;
+      showScreen('screen-habillage');
+      renderHabillage();
+    }catch(e){
+      btn.disabled = false;
+      msg.textContent = 'Erreur : ' + e.message;
+      msg.className = 'msg error';
+    }
+  }
+
+  async function saveLook(btnEl){
+    const items = {};
+    categories.forEach(cat => {
+      const arr = itemsByCategory[cat.id] || [];
+      const idx = indexByCategory[cat.id] || 0;
+      if(arr[idx]) items[cat.id] = arr[idx].id;
+    });
+    if(Object.keys(items).length === 0) return;
+
+    await db.collection('utilisatrices').doc(currentUid).collection('looks').add({
+      items, creeLe: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    if(btnEl){
+      const original = btnEl.innerHTML;
+      btnEl.innerHTML = CHECK_SVG;
+      setTimeout(() => { btnEl.innerHTML = HEART_SVG; }, 1200);
+    }
+  }
+
+  async function refreshLookCount(){
+    const snap = await db.collection('utilisatrices').doc(currentUid).collection('looks').get();
+    document.getElementById('look-count').textContent =
+      snap.size + (snap.size > 1 ? ' looks enregistrés' : ' look enregistré');
+  }
+
+  function showScreen(id){
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    if(id === 'screen-armoire') refreshLookCount();
+  }
+
+  async function initApp(user, pseudo){
+    currentUid = user.uid;
+    document.getElementById('habillage-pseudo').textContent = pseudo;
+    await ensureDefaultCategories(currentUid);
+    await loadCategoriesAndItems(currentUid);
+    renderHabillage();
+    showScreen('screen-habillage');
+  }
+
+  function logout(){
+    auth.signOut();
+  }
+
+  // Ecoute en continu l'état de connexion : bascule automatiquement d'écran,
+  // et reconnecte automatiquement si une session existait déjà.
+  auth.onAuthStateChanged(async (user) => {
+    document.getElementById('btn-submit').disabled = false;
+    if(user){
+      let pseudo = user.email.replace('@wa-app.local', '');
+      try{
+        const doc = await db.collection('utilisatrices').doc(user.uid).get();
+        if(doc.exists && doc.data().pseudo) pseudo = doc.data().pseudo;
+      }catch(e){ /* pas grave si le doc n'existe pas encore */ }
+
+      document.getElementById('screen-accueil').classList.remove('active');
+      await initApp(user, pseudo);
+    } else {
+      currentUid = null;
+      categories = [];
+      itemsByCategory = {};
+      indexByCategory = {};
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById('screen-accueil').classList.add('active');
+      setMsg('', '');
+    }
+  });
+
+</script>
+</body>
+</html>
