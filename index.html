@@ -207,14 +207,21 @@
     margin-bottom:14px;
   }
 
-  /* ---- ARMOIRE ---- */
-  .counts-row{ display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:16px; width:100%; }
+  /* ---- ARMOIRE (carte magazine) ---- */
+  .counts-row{ display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:14px; width:100%; }
   .count-chip{ background:var(--blush-soft); color:var(--raspberry-dark); font-size:0.7rem; font-weight:600; padding:5px 10px; border-radius:100px; }
-  .armoire-nav{ display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:18px; width:100%; }
-  .flatlay-grid{ display:flex; flex-wrap:wrap; gap:12px; justify-content:center; width:100%; }
-  .flatlay-piece{ display:flex; flex-direction:column; align-items:center; gap:5px; width:100px; }
-  .flatlay-piece img{ width:100px; height:100px; object-fit:cover; border-radius:12px; border:1px solid var(--line); background:#fff; }
-  .flatlay-piece span{ font-size:0.65rem; color:var(--ink-soft); font-weight:600; text-align:center; }
+  .mag-row{ display:flex; align-items:center; justify-content:center; gap:12px; width:100%; }
+  .mag-page{
+    width:212px; height:310px; background:#fff; border:1px solid var(--line); border-radius:18px;
+    box-shadow:0 10px 24px rgba(58,21,38,0.10); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:10px; padding:16px; overflow:hidden; flex-shrink:0;
+  }
+  .mag-piece{ display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .mag-piece img{ width:76px; height:76px; object-fit:cover; border-radius:10px; border:1px solid var(--line); }
+  .mag-piece span{ font-size:0.62rem; color:var(--ink-soft); font-weight:600; text-align:center; }
+
+  /* ---- CADRAGE ---- */
+  #crop-viewport img{ display:block; }
 </style>
 </head>
 <body>
@@ -282,18 +289,18 @@
     <select class="field-select" id="ajouter-cat-select" onchange="pendingCategoryForAdd = this.value"></select>
 
     <label class="upload-zone" style="border-color:#D42A5D;">
-      <input type="file" accept="image/*" id="input-photo-portee" onchange="previewUpload(this,'preview-portee')">
+      <input type="file" accept="image/*" id="input-photo-portee" onchange="onFileChosen(this,'portee')">
       <svg viewBox="0 0 24 24" fill="none" stroke="#D42A5D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 6l1.5-2h5L16 6"/></svg>
       <span class="up-title" style="color:#AD2049;">Photo portée</span>
-      <span class="up-sub">Toi qui portes le vêtement</span>
+      <span class="up-sub">Toi qui portes le vêtement — tu pourras la cadrer ensuite</span>
       <img class="preview" id="preview-portee" style="display:none;">
     </label>
 
     <label class="upload-zone">
-      <input type="file" accept="image/*" id="input-photo-plat" onchange="previewUpload(this,'preview-plat')">
+      <input type="file" accept="image/*" id="input-photo-plat" onchange="onFileChosen(this,'plat')">
       <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 6l1.5-2h5L16 6"/></svg>
       <span class="up-title">Photo à plat</span>
-      <span class="up-sub">Le vêtement seul, fond uni clair</span>
+      <span class="up-sub">Le vêtement seul, fond uni clair — tu pourras la cadrer ensuite</span>
       <img class="preview" id="preview-plat" style="display:none;">
     </label>
 
@@ -306,6 +313,27 @@
     <p class="msg" id="ajouter-msg"></p>
   </div>
 
+  <!-- ============ CADRAGE D'UNE PHOTO ============ -->
+  <div class="screen app-shell" id="screen-crop" style="align-items:center;">
+    <div class="topbar">
+      <div class="icon-btn" onclick="cancelCrop()" title="Annuler">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </div>
+      <span class="screen-title">Cadrer la photo</span>
+      <span style="width:38px;"></span>
+    </div>
+
+    <p class="empty-note" style="padding:0 0 14px;">Fais glisser la photo pour la positionner, utilise le curseur pour zoomer.</p>
+
+    <div id="crop-viewport" style="overflow:hidden; position:relative; background:#111; border-radius:14px; touch-action:none; margin-bottom:16px;">
+      <img id="crop-img" style="position:absolute; left:0; top:0; user-select:none; -webkit-user-drag:none; max-width:none;" draggable="false">
+    </div>
+
+    <input type="range" id="crop-zoom" min="1" max="3" step="0.01" value="1" oninput="onCropZoomChange(this.value)" style="width:100%; margin-bottom:18px;">
+
+    <button class="cta" onclick="validateCrop()">Valider le cadrage</button>
+  </div>
+
   <!-- ============ ARMOIRE (compteur pour l'instant, magazine à la prochaine étape) ============ -->
   <div class="screen app-shell" id="screen-armoire" style="align-items:center;">
     <div class="topbar">
@@ -316,18 +344,17 @@
       <span style="width:38px;"></span>
     </div>
     <div id="armoire-counts" class="counts-row"></div>
+    <span class="screen-title" id="armoire-page-label" style="margin-bottom:14px;"></span>
 
-    <div class="armoire-nav">
+    <div class="mag-row">
       <div class="arrow-side" onclick="cycleLook(-1)">
         <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
       </div>
-      <span class="screen-title" id="armoire-page-label"></span>
+      <div id="armoire-stage" class="mag-page"></div>
       <div class="arrow-side" onclick="cycleLook(1)">
         <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
       </div>
     </div>
-
-    <div id="armoire-stage" style="width:100%;"></div>
   </div>
 
   <!-- ============ REGLAGES (placeholder pour l'instant) ============ -->
@@ -541,6 +568,9 @@
     renderHabillage();
   }
 
+  const HABILLAGE_RATIO = 2.3;
+  const PLAT_RATIO = 1;
+
   function openAddScreen(catId){
     pendingCategoryForAdd = catId || (categories[0] && categories[0].id);
     const select = document.getElementById('ajouter-cat-select');
@@ -553,50 +583,137 @@
     document.getElementById('preview-portee').style.display = 'none';
     document.getElementById('preview-plat').style.display = 'none';
     document.getElementById('ajouter-msg').textContent = '';
+    croppedPorteeDataURL = null;
+    croppedPlatDataURL = null;
     showScreen('screen-ajouter');
   }
 
-  function previewUpload(input, imgId){
-    const img = document.getElementById(imgId);
-    if(input.files && input.files[0]){
-      img.src = URL.createObjectURL(input.files[0]);
-      img.style.display = 'block';
-    }
+  // ------------------------------------------------------------
+  // CADRAGE — on charge l'image via URL.createObjectURL plutôt que
+  // FileReader : bien plus fiable sur mobile (évite les échecs
+  // aléatoires de lecture rencontrés avec les grosses photos).
+  // ------------------------------------------------------------
+  let pendingCropSlot = null;
+  let croppedPorteeDataURL = null;
+  let croppedPlatDataURL = null;
+  let cropState = {};
+
+  function onFileChosen(input, slot){
+    const file = input.files[0];
+    if(!file) return;
+    pendingCropSlot = slot;
+    openCropScreen(file, slot === 'portee' ? HABILLAGE_RATIO : PLAT_RATIO);
   }
 
-  // Compresse une photo côté navigateur et la renvoie en chaîne "data URL"
-  // (image directement stockable dans un champ Firestore, sans passer par
-  // Firebase Storage — donc sans forfait payant ni carte bancaire requise).
-  function compressImageToDataURL(file, maxDim, quality){
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error('Impossible de lire ce fichier.'));
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onerror = () => reject(new Error("Ce format de photo n'est pas supporté (essaie une autre photo, ou passe ton appareil photo en réglage \"Le plus compatible\")."));
-        img.onload = () => {
-          let w = img.width, h = img.height;
-          if(w > h && w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; }
-          else if(h >= w && h > maxDim){ w = Math.round(w * maxDim / h); h = maxDim; }
-          const canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', quality));
-        };
-        img.src = e.target.result;
+  function openCropScreen(file, ratio){
+    const vp = document.getElementById('crop-viewport');
+    const baseW = Math.min(300, window.innerWidth - 80);
+    const w = baseW, h = Math.round(baseW / ratio);
+    vp.style.width = w + 'px';
+    vp.style.height = h + 'px';
+
+    const img = document.getElementById('crop-img');
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      const iw = img.naturalWidth, ih = img.naturalHeight;
+      const coverScale = Math.max(w / iw, h / ih);
+      cropState = {
+        iw, ih, containerW:w, containerH:h, coverScale, scale:coverScale,
+        tx:(w - iw*coverScale)/2, ty:(h - ih*coverScale)/2,
+        dragging:false, lastX:0, lastY:0, objectUrl
       };
-      reader.readAsDataURL(file);
+      applyCropTransform();
+      document.getElementById('crop-zoom').value = 1;
+      showScreen('screen-crop');
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      document.getElementById('ajouter-msg').textContent =
+        "Impossible de charger cette photo (format non supporté ?) — essaie une autre photo.";
+      document.getElementById('ajouter-msg').className = 'msg error';
+    };
+    img.src = objectUrl;
+  }
+
+  function clampCrop(){
+    const { containerW:w, containerH:h, iw, ih, scale } = cropState;
+    const dispW = iw*scale, dispH = ih*scale;
+    cropState.tx = Math.min(0, Math.max(w - dispW, cropState.tx));
+    cropState.ty = Math.min(0, Math.max(h - dispH, cropState.ty));
+  }
+
+  function applyCropTransform(){
+    const img = document.getElementById('crop-img');
+    img.style.width = (cropState.iw*cropState.scale)+'px';
+    img.style.height = (cropState.ih*cropState.scale)+'px';
+    img.style.transform = 'translate('+cropState.tx+'px,'+cropState.ty+'px)';
+  }
+
+  function onCropZoomChange(val){
+    cropState.scale = cropState.coverScale * parseFloat(val);
+    clampCrop();
+    applyCropTransform();
+  }
+
+  function initCropDrag(){
+    const vp = document.getElementById('crop-viewport');
+    vp.addEventListener('pointerdown', (e) => {
+      cropState.dragging = true;
+      cropState.lastX = e.clientX;
+      cropState.lastY = e.clientY;
+      vp.setPointerCapture(e.pointerId);
     });
+    vp.addEventListener('pointermove', (e) => {
+      if(!cropState.dragging) return;
+      cropState.tx += e.clientX - cropState.lastX;
+      cropState.ty += e.clientY - cropState.lastY;
+      cropState.lastX = e.clientX;
+      cropState.lastY = e.clientY;
+      clampCrop();
+      applyCropTransform();
+    });
+    vp.addEventListener('pointerup', () => { cropState.dragging = false; });
+    vp.addEventListener('pointercancel', () => { cropState.dragging = false; });
+  }
+
+  function validateCrop(){
+    const canvas = document.createElement('canvas');
+    const ratio = cropState.containerW / cropState.containerH;
+    const outW = 800, outH = Math.round(800 / ratio);
+    canvas.width = outW; canvas.height = outH;
+
+    const sx = -cropState.tx / cropState.scale;
+    const sy = -cropState.ty / cropState.scale;
+    const sw = cropState.containerW / cropState.scale;
+    const sh = cropState.containerH / cropState.scale;
+    canvas.getContext('2d').drawImage(document.getElementById('crop-img'), sx, sy, sw, sh, 0, 0, outW, outH);
+    const dataURL = canvas.toDataURL('image/jpeg', 0.75);
+
+    if(pendingCropSlot === 'portee'){
+      croppedPorteeDataURL = dataURL;
+      document.getElementById('preview-portee').src = dataURL;
+      document.getElementById('preview-portee').style.display = 'block';
+    } else {
+      croppedPlatDataURL = dataURL;
+      document.getElementById('preview-plat').src = dataURL;
+      document.getElementById('preview-plat').style.display = 'block';
+    }
+    if(cropState.objectUrl) URL.revokeObjectURL(cropState.objectUrl);
+    showScreen('screen-ajouter');
+  }
+
+  function cancelCrop(){
+    if(cropState.objectUrl) URL.revokeObjectURL(cropState.objectUrl);
+    showScreen('screen-ajouter');
   }
 
   async function submitNewVetement(){
-    const fPortee = document.getElementById('input-photo-portee').files[0];
-    const fPlat = document.getElementById('input-photo-plat').files[0];
     const nom = document.getElementById('input-nom-vetement').value.trim();
     const msg = document.getElementById('ajouter-msg');
     const btn = document.getElementById('btn-ajouter-submit');
 
-    if(!fPortee && !fPlat){
+    if(!croppedPorteeDataURL && !croppedPlatDataURL){
       msg.textContent = 'Ajoute au moins une photo.';
       msg.className = 'msg error';
       return;
@@ -613,9 +730,8 @@
         nom: nom || null,
         creeLe: firebase.firestore.FieldValue.serverTimestamp()
       };
-
-      if(fPortee) data.photoPorteeURL = await compressImageToDataURL(fPortee, 700, 0.65);
-      if(fPlat) data.photoPlatURL = await compressImageToDataURL(fPlat, 700, 0.65);
+      if(croppedPorteeDataURL) data.photoPorteeURL = croppedPorteeDataURL;
+      if(croppedPlatDataURL) data.photoPlatURL = croppedPlatDataURL;
 
       await ref.set(data);
       await loadCategoriesAndItems(currentUid);
@@ -678,7 +794,7 @@
 
     if(looks.length === 0){
       pageLabel.textContent = '';
-      stage.innerHTML = '<p class="empty-note">Aucun look enregistré pour l\'instant — retourne dans l\'Habillage et appuie sur le cœur pour en sauvegarder un.</p>';
+      stage.innerHTML = '<p class="empty-note" style="padding:0;">Aucun look enregistré pour l\'instant — retourne dans l\'Habillage et appuie sur le cœur pour en sauvegarder un.</p>';
       return;
     }
 
@@ -690,10 +806,10 @@
       const cat = categories.find(c => c.id === catId);
       if(!item) return '';
       const url = item.photoPlatURL || item.photoPorteeURL;
-      return '<div class="flatlay-piece"><img src="'+url+'" alt=""><span>'+(cat ? cat.nom : '')+'</span></div>';
+      return '<div class="mag-piece"><img src="'+url+'" alt=""><span>'+(cat ? cat.nom : '')+'</span></div>';
     }).join('');
 
-    stage.innerHTML = '<div class="flatlay-grid">' + pieces + '</div>';
+    stage.innerHTML = pieces;
   }
 
   function cycleLook(dir){
@@ -791,6 +907,8 @@
 
   // Ecoute en continu l'état de connexion : bascule automatiquement d'écran,
   // et reconnecte automatiquement si une session existait déjà.
+  initCropDrag();
+
   auth.onAuthStateChanged(async (user) => {
     document.getElementById('btn-submit').disabled = false;
     if(user){
