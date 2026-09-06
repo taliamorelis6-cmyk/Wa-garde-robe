@@ -206,6 +206,15 @@
     padding:12px 14px; font-family:'Work Sans',sans-serif; font-size:0.9rem; color:var(--ink);
     margin-bottom:14px;
   }
+
+  /* ---- ARMOIRE ---- */
+  .counts-row{ display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:16px; width:100%; }
+  .count-chip{ background:var(--blush-soft); color:var(--raspberry-dark); font-size:0.7rem; font-weight:600; padding:5px 10px; border-radius:100px; }
+  .armoire-nav{ display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:18px; width:100%; }
+  .flatlay-grid{ display:flex; flex-wrap:wrap; gap:12px; justify-content:center; width:100%; }
+  .flatlay-piece{ display:flex; flex-direction:column; align-items:center; gap:5px; width:100px; }
+  .flatlay-piece img{ width:100px; height:100px; object-fit:cover; border-radius:12px; border:1px solid var(--line); background:#fff; }
+  .flatlay-piece span{ font-size:0.65rem; color:var(--ink-soft); font-weight:600; text-align:center; }
 </style>
 </head>
 <body>
@@ -306,8 +315,19 @@
       <span class="screen-title">Armoire</span>
       <span style="width:38px;"></span>
     </div>
-    <p class="look-count" id="look-count">…</p>
-    <p class="empty-note">L'affichage façon magazine (un look par page, compteurs par catégorie) arrive à la prochaine étape — ce chiffre confirme juste que tes looks sont bien enregistrés dans Firestore.</p>
+    <div id="armoire-counts" class="counts-row"></div>
+
+    <div class="armoire-nav">
+      <div class="arrow-side" onclick="cycleLook(-1)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </div>
+      <span class="screen-title" id="armoire-page-label"></span>
+      <div class="arrow-side" onclick="cycleLook(1)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+
+    <div id="armoire-stage" style="width:100%;"></div>
   </div>
 
   <!-- ============ REGLAGES (placeholder pour l'instant) ============ -->
@@ -629,10 +649,57 @@
     }
   }
 
-  async function refreshLookCount(){
-    const snap = await db.collection('utilisatrices').doc(currentUid).collection('looks').get();
-    document.getElementById('look-count').textContent =
-      snap.size + (snap.size > 1 ? ' looks enregistrés' : ' look enregistré');
+  let looks = [];
+  let currentLookIndex = 0;
+
+  async function loadLooks(){
+    const snap = await db.collection('utilisatrices').doc(currentUid).collection('looks').orderBy('creeLe', 'desc').get();
+    looks = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    if(currentLookIndex >= looks.length) currentLookIndex = 0;
+  }
+
+  function getItemById(itemId){
+    for(const catId in itemsByCategory){
+      const found = (itemsByCategory[catId] || []).find(it => it.id === itemId);
+      if(found) return found;
+    }
+    return null;
+  }
+
+  function renderArmoire(){
+    const countsEl = document.getElementById('armoire-counts');
+    countsEl.innerHTML = categories.map(cat => {
+      const n = (itemsByCategory[cat.id] || []).length;
+      return '<div class="count-chip">'+cat.nom+' · '+n+'</div>';
+    }).join('');
+
+    const pageLabel = document.getElementById('armoire-page-label');
+    const stage = document.getElementById('armoire-stage');
+
+    if(looks.length === 0){
+      pageLabel.textContent = '';
+      stage.innerHTML = '<p class="empty-note">Aucun look enregistré pour l\'instant — retourne dans l\'Habillage et appuie sur le cœur pour en sauvegarder un.</p>';
+      return;
+    }
+
+    pageLabel.textContent = 'Look ' + (currentLookIndex + 1) + ' / ' + looks.length;
+
+    const look = looks[currentLookIndex];
+    const pieces = Object.entries(look.items || {}).map(([catId, itemId]) => {
+      const item = getItemById(itemId);
+      const cat = categories.find(c => c.id === catId);
+      if(!item) return '';
+      const url = item.photoPlatURL || item.photoPorteeURL;
+      return '<div class="flatlay-piece"><img src="'+url+'" alt=""><span>'+(cat ? cat.nom : '')+'</span></div>';
+    }).join('');
+
+    stage.innerHTML = '<div class="flatlay-grid">' + pieces + '</div>';
+  }
+
+  function cycleLook(dir){
+    if(looks.length === 0) return;
+    currentLookIndex = (currentLookIndex + dir + looks.length) % looks.length;
+    renderArmoire();
   }
 
   const CHEVRON_UP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg>';
@@ -705,7 +772,7 @@
   function showScreen(id){
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
-    if(id === 'screen-armoire') refreshLookCount();
+    if(id === 'screen-armoire'){ loadLooks().then(renderArmoire); }
     if(id === 'screen-reglages') renderCategoriesManager();
   }
 
