@@ -172,6 +172,40 @@
     text-align:center; font-family:'Fraunces',serif; font-style:italic; font-size:1.3rem;
     color:var(--plum); margin:26px 0 4px;
   }
+
+  /* ---- GESTION DES CATEGORIES (Réglages) ---- */
+  .section-title{ font-family:'Fraunces',serif; font-style:italic; font-size:1rem; color:var(--plum); margin:18px 0 10px; align-self:flex-start; }
+  .cat-manage-row{
+    display:flex; align-items:center; justify-content:space-between; width:100%;
+    background:#fff; border:1px solid var(--line); border-radius:12px;
+    padding:10px 14px; margin-bottom:8px; font-size:0.85rem; font-weight:500;
+  }
+  .switch{ position:relative; width:42px; height:24px; flex-shrink:0; }
+  .switch input{ opacity:0; width:0; height:0; }
+  .switch .slider{ position:absolute; inset:0; background:#E7DAD4; border-radius:100px; cursor:pointer; transition:.2s; }
+  .switch .slider:before{ content:""; position:absolute; height:18px; width:18px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; }
+  .switch input:checked + .slider{ background:var(--raspberry); }
+  .switch input:checked + .slider:before{ transform:translateX(18px); }
+  .reorder-btn{
+    width:26px; height:26px; border-radius:50%; background:var(--blush-soft);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
+  }
+  .reorder-btn svg{ width:12px; height:12px; }
+  .reorder-btn.disabled{ opacity:0.25; pointer-events:none; }
+  .add-cat-row{ display:flex; gap:8px; width:100%; margin-top:6px; }
+  .add-cat-row input{
+    flex:1; border:1px solid var(--line); background:#fff; border-radius:12px;
+    padding:10px 14px; font-family:'Work Sans',sans-serif; font-size:0.85rem;
+  }
+  .add-cat-row button{
+    border:none; background:var(--raspberry); color:#fff; border-radius:12px;
+    padding:0 16px; font-weight:600; cursor:pointer;
+  }
+  select.field-select{
+    width:100%; border:1px solid var(--line); background:#fff; border-radius:12px;
+    padding:12px 14px; font-family:'Work Sans',sans-serif; font-size:0.9rem; color:var(--ink);
+    margin-bottom:14px;
+  }
 </style>
 </head>
 <body>
@@ -236,7 +270,7 @@
       <span style="width:38px;"></span>
     </div>
 
-    <span class="cat-chip-big" id="ajouter-cat-chip">Catégorie</span>
+    <select class="field-select" id="ajouter-cat-select" onchange="pendingCategoryForAdd = this.value"></select>
 
     <label class="upload-zone" style="border-color:#D42A5D;">
       <input type="file" accept="image/*" id="input-photo-portee" onchange="previewUpload(this,'preview-portee')">
@@ -285,7 +319,18 @@
       <span class="screen-title">Réglages</span>
       <span style="width:38px;"></span>
     </div>
-    <p class="empty-note">Le thème de couleurs, le Mode Mémère, la gestion des catégories et le nombre de catégories affichées arriveront ici à une prochaine étape.</p>
+    <p class="empty-note" style="padding-bottom:6px;">Choisis les catégories à afficher dans l'habillage, ou ajoutes-en de nouvelles.</p>
+
+    <p class="section-title">Tes catégories</p>
+    <div id="categories-list" style="width:100%;"></div>
+
+    <div class="add-cat-row">
+      <input type="text" id="input-nouvelle-categorie" placeholder="Nouvelle catégorie (ex. Vestes)">
+      <button onclick="ajouterCategorie()">Ajouter</button>
+    </div>
+    <p class="msg" id="categorie-msg"></p>
+
+    <p class="empty-note">Le thème de couleurs, le Mode Mémère et le reste des réglages arriveront ici à une prochaine étape.</p>
     <button class="cta secondary" onclick="logout()">Se déconnecter</button>
   </div>
 
@@ -427,7 +472,14 @@
   function renderHabillage(){
     const stack = document.getElementById('photo-stack');
     stack.innerHTML = '';
-    categories.forEach(cat => {
+    const visibles = categories.filter(c => c.affichee !== false);
+
+    if(visibles.length === 0){
+      stack.innerHTML = '<p class="empty-note">Aucune catégorie affichée pour l\'instant — va dans Réglages pour en activer ou en créer une.</p>';
+      return;
+    }
+
+    visibles.forEach(cat => {
       const items = itemsByCategory[cat.id] || [];
       const idx = indexByCategory[cat.id] || 0;
       const item = items[idx];
@@ -471,8 +523,10 @@
 
   function openAddScreen(catId){
     pendingCategoryForAdd = catId || (categories[0] && categories[0].id);
-    const cat = categories.find(c => c.id === pendingCategoryForAdd);
-    document.getElementById('ajouter-cat-chip').textContent = 'Catégorie : ' + (cat ? cat.nom : '');
+    const select = document.getElementById('ajouter-cat-select');
+    select.innerHTML = categories.map(c =>
+      '<option value="'+c.id+'"'+(c.id===pendingCategoryForAdd ? ' selected' : '')+'>'+c.nom+'</option>'
+    ).join('');
     document.getElementById('input-photo-portee').value = '';
     document.getElementById('input-photo-plat').value = '';
     document.getElementById('input-nom-vetement').value = '';
@@ -496,10 +550,10 @@
   function compressImageToDataURL(file, maxDim, quality){
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onerror = reject;
+      reader.onerror = () => reject(new Error('Impossible de lire ce fichier.'));
       reader.onload = (e) => {
         const img = new Image();
-        img.onerror = reject;
+        img.onerror = () => reject(new Error("Ce format de photo n'est pas supporté (essaie une autre photo, ou passe ton appareil photo en réglage \"Le plus compatible\")."));
         img.onload = () => {
           let w = img.width, h = img.height;
           if(w > h && w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; }
@@ -550,7 +604,7 @@
       renderHabillage();
     }catch(e){
       btn.disabled = false;
-      msg.textContent = 'Erreur : ' + e.message;
+      msg.textContent = 'Erreur : ' + (e.message || 'quelque chose a mal tourné, réessaie.');
       msg.className = 'msg error';
     }
   }
@@ -581,10 +635,78 @@
       snap.size + (snap.size > 1 ? ' looks enregistrés' : ' look enregistré');
   }
 
+  const CHEVRON_UP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg>';
+  const CHEVRON_DOWN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>';
+
+  function renderCategoriesManager(){
+    const list = document.getElementById('categories-list');
+    list.innerHTML = '';
+    categories.forEach((cat, idx) => {
+      const row = document.createElement('div');
+      row.className = 'cat-manage-row';
+      const checked = cat.affichee !== false ? 'checked' : '';
+      row.innerHTML =
+        '<span style="flex:1;">'+cat.nom+'</span>'+
+        '<div style="display:flex; gap:4px; margin-right:10px;">'+
+          '<div class="reorder-btn'+(idx===0 ? ' disabled' : '')+'" onclick="moveCategorie(\''+cat.id+'\', -1)">'+CHEVRON_UP_SVG+'</div>'+
+          '<div class="reorder-btn'+(idx===categories.length-1 ? ' disabled' : '')+'" onclick="moveCategorie(\''+cat.id+'\', 1)">'+CHEVRON_DOWN_SVG+'</div>'+
+        '</div>'+
+        '<label class="switch">'+
+          '<input type="checkbox" '+checked+' onchange="toggleCategorieAffichee(\''+cat.id+'\', this.checked)">'+
+          '<span class="slider"></span>'+
+        '</label>';
+      list.appendChild(row);
+    });
+  }
+
+  async function moveCategorie(catId, dir){
+    const idx = categories.findIndex(c => c.id === catId);
+    const swapIdx = idx + dir;
+    if(swapIdx < 0 || swapIdx >= categories.length) return;
+
+    const a = categories[idx], b = categories[swapIdx];
+    const batch = db.batch();
+    const colRef = db.collection('utilisatrices').doc(currentUid).collection('categories');
+    batch.update(colRef.doc(a.id), { ordre: b.ordre });
+    batch.update(colRef.doc(b.id), { ordre: a.ordre });
+    await batch.commit();
+
+    await loadCategoriesAndItems(currentUid);
+    renderCategoriesManager();
+    renderHabillage();
+  }
+
+  async function toggleCategorieAffichee(catId, value){
+    await db.collection('utilisatrices').doc(currentUid).collection('categories').doc(catId).update({ affichee: value });
+    const cat = categories.find(c => c.id === catId);
+    if(cat) cat.affichee = value;
+    renderHabillage();
+  }
+
+  async function ajouterCategorie(){
+    const input = document.getElementById('input-nouvelle-categorie');
+    const msg = document.getElementById('categorie-msg');
+    const nom = input.value.trim();
+    if(!nom){
+      msg.textContent = 'Donne un nom à la catégorie.';
+      msg.className = 'msg error';
+      return;
+    }
+    await db.collection('utilisatrices').doc(currentUid).collection('categories').add({
+      nom, ordre: categories.length, affichee: true
+    });
+    input.value = '';
+    msg.textContent = '';
+    await loadCategoriesAndItems(currentUid);
+    renderCategoriesManager();
+    renderHabillage();
+  }
+
   function showScreen(id){
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
     if(id === 'screen-armoire') refreshLookCount();
+    if(id === 'screen-reglages') renderCategoriesManager();
   }
 
   async function initApp(user, pseudo){
