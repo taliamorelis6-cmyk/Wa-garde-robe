@@ -335,6 +335,9 @@
       <img id="crop-img" style="position:absolute; left:0; top:0; user-select:none; -webkit-user-drag:none; max-width:none;" draggable="false">
     </div>
 
+    <div style="display:flex; justify-content:space-between; width:100%; font-size:0.65rem; color:var(--ink-soft); margin-bottom:4px;">
+      <span>Tout voir</span><span>Zoomer</span>
+    </div>
     <input type="range" id="crop-zoom" min="1" max="3" step="0.01" value="1" oninput="onCropZoomChange(this.value)" style="width:100%; margin-bottom:18px;">
 
     <button class="cta" onclick="validateCrop()">Valider le cadrage</button>
@@ -632,14 +635,22 @@
 
     img.onload = () => {
       const iw = img.naturalWidth, ih = img.naturalHeight;
-      const coverScale = Math.max(w / iw, h / ih);
+      const containScale = Math.min(w / iw, h / ih); // photo entière visible (peut laisser des marges)
+      const coverScale = Math.max(w / iw, h / ih);   // photo remplit le cadre (peut couper)
       cropState = {
-        iw, ih, containerW:w, containerH:h, coverScale, scale:coverScale,
-        tx:(w - iw*coverScale)/2, ty:(h - ih*coverScale)/2,
+        iw, ih, containerW:w, containerH:h, containScale, coverScale, scale:coverScale,
         dragging:false, lastX:0, lastY:0, objectUrl
       };
+      cropState.tx = (w - iw*coverScale)/2;
+      cropState.ty = (h - ih*coverScale)/2;
+
+      const zoomEl = document.getElementById('crop-zoom');
+      zoomEl.min = containScale;
+      zoomEl.max = containScale * 4;
+      zoomEl.step = (zoomEl.max - zoomEl.min) / 300;
+      zoomEl.value = coverScale;
+
       applyCropTransform();
-      document.getElementById('crop-zoom').value = 1;
       showScreen('screen-crop');
     };
     img.onerror = () => {
@@ -654,8 +665,11 @@
   function clampCrop(){
     const { containerW:w, containerH:h, iw, ih, scale } = cropState;
     const dispW = iw*scale, dispH = ih*scale;
-    cropState.tx = Math.min(0, Math.max(w - dispW, cropState.tx));
-    cropState.ty = Math.min(0, Math.max(h - dispH, cropState.ty));
+
+    // Si la photo est plus petite que le cadre à ce niveau de zoom, on la centre
+    // (marges blanches) plutôt que de forcer un déplacement impossible.
+    cropState.tx = (dispW <= w) ? (w - dispW) / 2 : Math.min(0, Math.max(w - dispW, cropState.tx));
+    cropState.ty = (dispH <= h) ? (h - dispH) / 2 : Math.min(0, Math.max(h - dispH, cropState.ty));
   }
 
   function applyCropTransform(){
@@ -666,7 +680,7 @@
   }
 
   function onCropZoomChange(val){
-    cropState.scale = cropState.coverScale * parseFloat(val);
+    cropState.scale = parseFloat(val);
     clampCrop();
     applyCropTransform();
   }
@@ -698,11 +712,15 @@
     const outW = 800, outH = Math.round(800 / ratio);
     canvas.width = outW; canvas.height = outH;
 
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff'; // marges propres si la photo ne remplit pas tout le cadre
+    ctx.fillRect(0, 0, outW, outH);
+
     const sx = -cropState.tx / cropState.scale;
     const sy = -cropState.ty / cropState.scale;
     const sw = cropState.containerW / cropState.scale;
     const sh = cropState.containerH / cropState.scale;
-    canvas.getContext('2d').drawImage(document.getElementById('crop-img'), sx, sy, sw, sh, 0, 0, outW, outH);
+    ctx.drawImage(document.getElementById('crop-img'), sx, sy, sw, sh, 0, 0, outW, outH);
     const dataURL = canvas.toDataURL('image/jpeg', 0.75);
 
     if(pendingCropSlot === 'portee'){
