@@ -228,6 +228,27 @@
     background:var(--blush-soft); display:flex; align-items:center; justify-content:center; cursor:pointer;
   }
   .mag-edit-btn svg{ width:15px; height:15px; }
+
+  /* ---- EDITEUR DE LOOK ---- */
+  #editeur-stage{
+    position:relative; width:280px; height:380px; max-width:100%;
+    background:#fff; border:1px solid var(--line); border-radius:16px; overflow:hidden;
+  }
+  .mode-btn{
+    flex:1; padding:9px 4px; border-radius:10px; border:1px solid var(--line); background:#fff;
+    font-family:'Work Sans',sans-serif; font-size:0.75rem; font-weight:600; color:var(--ink-soft); cursor:pointer;
+  }
+  .mode-btn.active{ background:var(--raspberry); color:#fff; border-color:var(--raspberry); }
+  .mini-btn{
+    flex:1; padding:8px 4px; border-radius:10px; border:1px solid var(--line); background:#fff;
+    font-family:'Work Sans',sans-serif; font-size:0.72rem; font-weight:600; color:var(--ink-soft); cursor:pointer;
+  }
+  .layer-selected-outline{ position:absolute; border:2px dashed var(--raspberry); pointer-events:none; border-radius:4px; }
+  .resize-handle{
+    position:absolute; width:18px; height:18px; background:var(--raspberry); border:2px solid #fff;
+    border-radius:50%; cursor:nwse-resize; box-shadow:0 2px 5px rgba(58,21,38,0.2);
+  }
+  .mag-composition-wrapper{ position:absolute; top:0; left:0; width:280px; height:380px; transform-origin:top left; }
   .mag-piece{ display:flex; flex-direction:column; align-items:center; gap:4px; }
   .mag-piece img{ width:92px; height:92px; object-fit:cover; border-radius:10px; border:1px solid var(--line); }
   .mag-piece span{ font-size:0.62rem; color:var(--ink-soft); font-weight:600; text-align:center; }
@@ -369,6 +390,46 @@
       <div class="arrow-side" onclick="cycleLook(1)">
         <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
       </div>
+    </div>
+  </div>
+
+  <!-- ============ EDITEUR DE LOOK (collage manuel) ============ -->
+  <div class="screen app-shell" id="screen-editeur" style="align-items:center;">
+    <div class="topbar">
+      <div class="icon-btn" onclick="closeEditeur()" title="Retour">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </div>
+      <span class="screen-title">Modifier le look</span>
+      <div class="icon-btn filled" onclick="saveEditeurComposition()" title="Enregistrer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l6 6L20 6"/></svg>
+      </div>
+    </div>
+
+    <p class="empty-note" style="padding:0 0 10px;">Tape une pièce pour la sélectionner, puis choisis un mode ci-dessous.</p>
+
+    <div id="editeur-stage"></div>
+
+    <div id="editeur-toolbar" style="display:none; width:100%; margin-top:14px;">
+      <div style="display:flex; gap:8px; margin-bottom:10px;">
+        <button class="mode-btn active" data-mode="deplacer" onclick="setEditMode('deplacer')">Déplacer</button>
+        <button class="mode-btn" data-mode="gomme" onclick="setEditMode('gomme')">Gomme</button>
+        <button class="mode-btn" data-mode="restaurer" onclick="setEditMode('restaurer')">Restaurer</button>
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:10px;">
+        <button class="mini-btn" onclick="layerZ(1)">Avancer</button>
+        <button class="mini-btn" onclick="layerZ(-1)">Reculer</button>
+        <button class="mini-btn" onclick="removeLayer()">Retirer</button>
+      </div>
+      <label style="font-size:0.7rem; color:var(--ink-soft); font-weight:600;">Taille de la gomme</label>
+      <input type="range" id="brush-size" min="10" max="70" value="28" style="width:100%; margin:6px 0 4px;">
+    </div>
+
+    <button class="cta secondary" style="margin-top:14px;" onclick="openAddLayerPicker()">+ Ajouter une photo</button>
+    <input type="file" accept="image/*" id="input-extra-photo" style="display:none;" onchange="onExtraPhotoChosen(this)">
+
+    <div id="extra-cat-picker" style="display:none; width:100%; margin-top:10px;">
+      <select class="field-select" id="extra-cat-select"></select>
+      <button class="cta" onclick="confirmAddLayer()">Ajouter au collage</button>
     </div>
   </div>
 
@@ -873,6 +934,27 @@
     pageLabel.textContent = 'Look ' + (currentLookIndex + 1) + ' / ' + looks.length;
 
     const look = looks[currentLookIndex];
+    const editBtn =
+      '<div class="mag-edit-btn" onclick="openEditeurLook()" title="Outils du look">'+
+        '<svg viewBox="0 0 24 24" fill="none" stroke="#AD2049" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'+
+      '</div>';
+
+    if(look.composition && Object.keys(look.composition).length){
+      const keys = Object.keys(look.composition).sort((a,b) => look.composition[a].z - look.composition[b].z);
+      const layersHtml = keys.map(k => {
+        const c = look.composition[k];
+        return '<img src="'+c.imageURL+'" style="position:absolute; left:'+c.x+'px; top:'+c.y+'px; width:'+c.width+'px; height:'+c.height+'px;">';
+      }).join('');
+      stage.innerHTML = editBtn + '<div class="mag-composition-wrapper" id="mag-comp-wrapper">'+layersHtml+'</div>';
+      requestAnimationFrame(() => {
+        const wrapper = document.getElementById('mag-comp-wrapper');
+        if(!wrapper) return;
+        const s = Math.min(stage.clientWidth/280, stage.clientHeight/380);
+        wrapper.style.transform = 'scale('+s+')';
+      });
+      return;
+    }
+
     const pieces = categories.map(cat => {
       const itemId = look.items ? look.items[cat.id] : undefined;
       if(!itemId) return '';
@@ -882,14 +964,262 @@
       return '<div class="mag-piece"><img src="'+url+'" alt=""><span>'+cat.nom+'</span></div>';
     }).join('');
 
-    stage.innerHTML =
-      '<div class="mag-edit-btn" onclick="openEditeurLook()" title="Outils du look">'+
-        '<svg viewBox="0 0 24 24" fill="none" stroke="#AD2049" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'+
-      '</div>' + pieces;
+    stage.innerHTML = editBtn + pieces;
+  }
+
+  // ============================================================
+  // EDITEUR DE LOOK — collage manuel (calques déplaçables/
+  // redimensionnables, gomme/restaurer, superposition, ajout libre)
+  // ============================================================
+  let editorLayers = [];
+  let editorSelected = -1;
+  let editorMode = 'deplacer';
+  let editorLookId = null;
+  let editorDragging = null;
+  let pendingExtraFile = null;
+
+  function makeLayerCanvases(img, targetLong){
+    let baseW, baseH;
+    if(img.naturalWidth >= img.naturalHeight){
+      baseW = targetLong; baseH = Math.round(targetLong * img.naturalHeight / img.naturalWidth);
+    } else {
+      baseH = targetLong; baseW = Math.round(targetLong * img.naturalWidth / img.naturalHeight);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = baseW; canvas.height = baseH;
+    canvas.getContext('2d').drawImage(img, 0, 0, baseW, baseH);
+
+    const origCanvas = document.createElement('canvas');
+    origCanvas.width = baseW; origCanvas.height = baseH;
+    origCanvas.getContext('2d').drawImage(img, 0, 0, baseW, baseH);
+
+    return { canvas, origCanvas, baseW, baseH };
+  }
+
+  function loadImagePromise(src){
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
   }
 
   function openEditeurLook(){
-    alert("Les outils (gomme, déplacer, redimensionner, superposition, ajouter une photo) arrivent à la prochaine étape !");
+    const look = looks[currentLookIndex];
+    if(!look) return;
+    editorLookId = look.id;
+    editorSelected = -1;
+    editorMode = 'deplacer';
+
+    const comp = look.composition || null;
+    const catsInLook = categories.filter(c => look.items && look.items[c.id]);
+
+    const piecePromises = catsInLook.map((cat, i) => {
+      const item = getItemById(look.items[cat.id]);
+      const url = item ? (item.photoPlatURL || item.photoPorteeURL) : null;
+      if(!url) return Promise.resolve(null);
+      const saved = comp && comp[cat.id];
+      const srcToLoad = saved ? saved.imageURL : url;
+      return loadImagePromise(srcToLoad).then(img => {
+        const { canvas, origCanvas, baseW, baseH } = makeLayerCanvases(img, 220);
+        return {
+          key: cat.id, label: cat.nom, canvas, origCanvas, baseW, baseH,
+          x: saved ? saved.x : 24 + i*16,
+          y: saved ? saved.y : 24 + i*16,
+          scale: saved ? saved.width / baseW : 0.85
+        };
+      }).catch(() => null);
+    });
+
+    const extraKeys = comp ? Object.keys(comp).filter(k => k.indexOf('extra_') === 0) : [];
+    const extraPromises = extraKeys.map(k => {
+      const c = comp[k];
+      return loadImagePromise(c.imageURL).then(img => {
+        const { canvas, origCanvas, baseW, baseH } = makeLayerCanvases(img, 200);
+        return { key:k, label:c.label||'Autre', canvas, origCanvas, baseW, baseH, x:c.x, y:c.y, scale:c.width/baseW };
+      }).catch(() => null);
+    });
+
+    Promise.all(piecePromises.concat(extraPromises)).then(results => {
+      editorLayers = results.filter(Boolean);
+      renderEditorStage();
+      showScreen('screen-editeur');
+    });
+  }
+
+  function renderEditorStage(){
+    const stage = document.getElementById('editeur-stage');
+    stage.innerHTML = '';
+    editorLayers.forEach((layer, idx) => {
+      const c = layer.canvas;
+      c.style.position = 'absolute';
+      c.style.left = layer.x + 'px';
+      c.style.top = layer.y + 'px';
+      c.style.width = (layer.baseW*layer.scale) + 'px';
+      c.style.height = (layer.baseH*layer.scale) + 'px';
+      c.style.zIndex = idx;
+      c.style.touchAction = 'none';
+      c.onpointerdown = (e) => onLayerPointerDown(e, idx);
+      stage.appendChild(c);
+
+      if(idx === editorSelected){
+        const outline = document.createElement('div');
+        outline.className = 'layer-selected-outline';
+        outline.style.left = layer.x + 'px';
+        outline.style.top = layer.y + 'px';
+        outline.style.width = (layer.baseW*layer.scale) + 'px';
+        outline.style.height = (layer.baseH*layer.scale) + 'px';
+        outline.style.zIndex = idx + 500;
+        stage.appendChild(outline);
+
+        const handle = document.createElement('div');
+        handle.className = 'resize-handle';
+        handle.style.left = (layer.x + layer.baseW*layer.scale - 9) + 'px';
+        handle.style.top = (layer.y + layer.baseH*layer.scale - 9) + 'px';
+        handle.style.zIndex = idx + 501;
+        handle.onpointerdown = (e) => { e.stopPropagation(); onResizeHandleDown(e, idx); };
+        stage.appendChild(handle);
+      }
+    });
+    document.getElementById('editeur-toolbar').style.display = editorSelected >= 0 ? 'block' : 'none';
+  }
+
+  function selectLayer(idx){
+    editorSelected = idx;
+    renderEditorStage();
+  }
+
+  function onLayerPointerDown(e, idx){
+    e.preventDefault();
+    selectLayer(idx);
+    if(editorMode === 'deplacer'){
+      editorDragging = { type:'move', idx, startX:e.clientX, startY:e.clientY, origX:editorLayers[idx].x, origY:editorLayers[idx].y };
+    } else {
+      paintOnLayer(e, idx);
+      editorDragging = { type:'paint', idx };
+    }
+    e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId);
+  }
+
+  function paintOnLayer(e, idx){
+    const layer = editorLayers[idx];
+    const rect = layer.canvas.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (layer.canvas.width / rect.width);
+    const py = (e.clientY - rect.top) * (layer.canvas.height / rect.height);
+    const brush = parseInt(document.getElementById('brush-size').value, 10);
+    const ctx = layer.canvas.getContext('2d');
+
+    if(editorMode === 'gomme'){
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.beginPath();
+      ctx.arc(px, py, brush/2, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    } else if(editorMode === 'restaurer'){
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(px, py, brush/2, 0, Math.PI*2);
+      ctx.clip();
+      ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+      ctx.drawImage(layer.origCanvas, 0, 0);
+      ctx.restore();
+    }
+  }
+
+  function onResizeHandleDown(e, idx){
+    editorDragging = { type:'resize', idx, startX:e.clientX, origW: editorLayers[idx].baseW*editorLayers[idx].scale };
+    e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId);
+  }
+
+  window.addEventListener('pointermove', (e) => {
+    if(!editorDragging) return;
+    const layer = editorLayers[editorDragging.idx];
+    if(!layer) return;
+    if(editorDragging.type === 'move'){
+      layer.x = editorDragging.origX + (e.clientX - editorDragging.startX);
+      layer.y = editorDragging.origY + (e.clientY - editorDragging.startY);
+      renderEditorStage();
+    } else if(editorDragging.type === 'resize'){
+      const newW = Math.max(30, editorDragging.origW + (e.clientX - editorDragging.startX));
+      layer.scale = newW / layer.baseW;
+      renderEditorStage();
+    } else if(editorDragging.type === 'paint'){
+      paintOnLayer(e, editorDragging.idx);
+    }
+  });
+  window.addEventListener('pointerup', () => { editorDragging = null; });
+  window.addEventListener('pointercancel', () => { editorDragging = null; });
+
+  function setEditMode(mode){
+    editorMode = mode;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  }
+
+  function layerZ(dir){
+    if(editorSelected < 0) return;
+    const newIdx = editorSelected + dir;
+    if(newIdx < 0 || newIdx >= editorLayers.length) return;
+    const tmp = editorLayers[editorSelected];
+    editorLayers[editorSelected] = editorLayers[newIdx];
+    editorLayers[newIdx] = tmp;
+    editorSelected = newIdx;
+    renderEditorStage();
+  }
+
+  function removeLayer(){
+    if(editorSelected < 0) return;
+    editorLayers.splice(editorSelected, 1);
+    editorSelected = -1;
+    renderEditorStage();
+  }
+
+  function openAddLayerPicker(){
+    document.getElementById('input-extra-photo').click();
+  }
+
+  function onExtraPhotoChosen(input){
+    const file = input.files[0];
+    if(!file) return;
+    pendingExtraFile = file;
+    const select = document.getElementById('extra-cat-select');
+    select.innerHTML = categories.map(c => '<option value="'+c.nom+'">'+c.nom+'</option>').join('') + '<option value="Autre">Autre</option>';
+    document.getElementById('extra-cat-picker').style.display = 'block';
+  }
+
+  function confirmAddLayer(){
+    const label = document.getElementById('extra-cat-select').value;
+    const file = pendingExtraFile;
+    if(!file) return;
+    const objectUrl = URL.createObjectURL(file);
+    loadImagePromise(objectUrl).then(img => {
+      const { canvas, origCanvas, baseW, baseH } = makeLayerCanvases(img, 180);
+      editorLayers.push({ key:'extra_'+Date.now(), label, canvas, origCanvas, baseW, baseH, x:50, y:50, scale:0.9 });
+      URL.revokeObjectURL(objectUrl);
+      document.getElementById('extra-cat-picker').style.display = 'none';
+      document.getElementById('input-extra-photo').value = '';
+      selectLayer(editorLayers.length - 1);
+    });
+  }
+
+  function closeEditeur(){
+    showScreen('screen-armoire');
+  }
+
+  async function saveEditeurComposition(){
+    const composition = {};
+    editorLayers.forEach((layer, idx) => {
+      composition[layer.key] = {
+        imageURL: layer.canvas.toDataURL('image/png'),
+        x: layer.x, y: layer.y,
+        width: layer.baseW*layer.scale, height: layer.baseH*layer.scale,
+        z: idx, label: layer.label
+      };
+    });
+    await db.collection('utilisatrices').doc(currentUid).collection('looks').doc(editorLookId).update({ composition });
+    await loadLooks();
+    showScreen('screen-armoire');
+    renderArmoire();
   }
 
   function cycleLook(dir){
