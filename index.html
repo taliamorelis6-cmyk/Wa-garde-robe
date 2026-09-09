@@ -143,6 +143,12 @@
     position:absolute; left:8px; bottom:8px; background:rgba(255,255,255,0.9);
     padding:3px 9px; border-radius:100px; font-size:0.66rem; font-weight:600; color:var(--plum);
   }
+  .frame-edit-badge{
+    position:absolute; top:6px; right:6px; width:24px; height:24px; border-radius:50%;
+    background:rgba(255,255,255,0.92); display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 5px rgba(58,21,38,0.12);
+  }
+  .frame-edit-badge svg{ width:12px; height:12px; }
 
   .bottombar{ display:flex; align-items:center; justify-content:space-between; padding:14px 0 0; width:100%; }
   .fab{
@@ -490,6 +496,7 @@
   const PLUS_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
   const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l6 6L20 6"/></svg>';
   const HEART_SVG = '<svg viewBox="0 0 24 24" fill="#fff" stroke="#fff" stroke-width="1.5"><path d="M12 21s-7.5-4.9-10-9.3C.4 8.3 2 4.5 5.6 4c2-.3 3.9.6 4.9 2.2C11.5 4.6 13.4 3.7 15.4 4c3.6.5 5.2 4.3 3.6 7.7C16.5 16.1 12 21 12 21z"/></svg>';
+  const PENCIL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
 
   const DEFAULT_CATEGORIES = ['Coiffures','Hauts','Bas','Chaussures'];
 
@@ -551,8 +558,10 @@
       const frame = document.createElement('div');
       frame.className = 'photo-frame';
       if(item){
+        const slot = item.photoPorteeURL ? 'portee' : 'plat';
         const url = item.photoPorteeURL || item.photoPlatURL;
-        frame.innerHTML = '<img src="'+url+'" alt="">';
+        frame.innerHTML = '<img src="'+url+'" alt=""><div class="frame-edit-badge">'+PENCIL_SVG+'</div>';
+        frame.onclick = () => openEditPhoto(item.id, slot);
       } else {
         frame.innerHTML = '<div class="photo-placeholder">'+PLUS_ICON_SVG+'<span>Ajoute une photo dans '+cat.nom+'</span></div>';
         frame.onclick = () => openAddScreen(cat.id);
@@ -615,15 +624,28 @@
   let croppedPorteeDataURL = null;
   let croppedPlatDataURL = null;
   let cropState = {};
+  let editingItemId = null;
 
   function onFileChosen(input, slot){
     const file = input.files[0];
     if(!file) return;
+    editingItemId = null;
     pendingCropSlot = slot;
-    openCropScreen(file, slot === 'portee' ? getHabillageFrameRatio() : PLAT_RATIO);
+    openCropScreen(file, slot === 'portee' ? getHabillageFrameRatio() : PLAT_RATIO, false);
   }
 
-  function openCropScreen(file, ratio){
+  // Recadrer à nouveau une photo déjà enregistrée (tap sur le crayon dans l'Habillage)
+  function openEditPhoto(itemId, slot){
+    const item = getItemById(itemId);
+    if(!item) return;
+    const dataUrl = slot === 'portee' ? item.photoPorteeURL : item.photoPlatURL;
+    if(!dataUrl) return;
+    editingItemId = itemId;
+    pendingCropSlot = slot;
+    openCropScreen(dataUrl, slot === 'portee' ? getHabillageFrameRatio() : PLAT_RATIO, true);
+  }
+
+  function openCropScreen(source, ratio, isExistingDataUrl){
     const vp = document.getElementById('crop-viewport');
     const baseW = Math.min(300, window.innerWidth - 80);
     const w = baseW, h = Math.round(baseW / ratio);
@@ -631,7 +653,8 @@
     vp.style.height = h + 'px';
 
     const img = document.getElementById('crop-img');
-    const objectUrl = URL.createObjectURL(file);
+    const objectUrl = isExistingDataUrl ? null : URL.createObjectURL(source);
+    const srcToLoad = isExistingDataUrl ? source : objectUrl;
 
     img.onload = () => {
       const iw = img.naturalWidth, ih = img.naturalHeight;
@@ -654,12 +677,12 @@
       showScreen('screen-crop');
     };
     img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
+      if(objectUrl) URL.revokeObjectURL(objectUrl);
       document.getElementById('ajouter-msg').textContent =
         "Impossible de charger cette photo (format non supporté ?) — essaie une autre photo.";
       document.getElementById('ajouter-msg').className = 'msg error';
     };
-    img.src = objectUrl;
+    img.src = srcToLoad;
   }
 
   function clampCrop(){
@@ -706,7 +729,7 @@
     vp.addEventListener('pointercancel', () => { cropState.dragging = false; });
   }
 
-  function validateCrop(){
+  async function validateCrop(){
     const canvas = document.createElement('canvas');
     const ratio = cropState.containerW / cropState.containerH;
     const outW = 800, outH = Math.round(800 / ratio);
@@ -723,6 +746,20 @@
     ctx.drawImage(document.getElementById('crop-img'), sx, sy, sw, sh, 0, 0, outW, outH);
     const dataURL = canvas.toDataURL('image/jpeg', 0.75);
 
+    if(cropState.objectUrl) URL.revokeObjectURL(cropState.objectUrl);
+
+    if(editingItemId){
+      // Modification d'une photo déjà enregistrée : on met à jour direct dans Firestore
+      const field = pendingCropSlot === 'portee' ? 'photoPorteeURL' : 'photoPlatURL';
+      const idToUpdate = editingItemId;
+      editingItemId = null;
+      showScreen('screen-habillage');
+      await db.collection('utilisatrices').doc(currentUid).collection('vetements').doc(idToUpdate).update({ [field]: dataURL });
+      await loadCategoriesAndItems(currentUid);
+      renderHabillage();
+      return;
+    }
+
     if(pendingCropSlot === 'portee'){
       croppedPorteeDataURL = dataURL;
       document.getElementById('preview-portee').src = dataURL;
@@ -732,12 +769,14 @@
       document.getElementById('preview-plat').src = dataURL;
       document.getElementById('preview-plat').style.display = 'block';
     }
-    if(cropState.objectUrl) URL.revokeObjectURL(cropState.objectUrl);
     showScreen('screen-ajouter');
   }
 
   function cancelCrop(){
     if(cropState.objectUrl) URL.revokeObjectURL(cropState.objectUrl);
+    const wasEditing = editingItemId;
+    editingItemId = null;
+    if(wasEditing){ showScreen('screen-habillage'); return; }
     showScreen('screen-ajouter');
   }
 
