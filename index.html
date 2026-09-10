@@ -226,6 +226,7 @@
   .mag-edit-btn{
     position:absolute; top:12px; right:12px; width:32px; height:32px; border-radius:50%;
     background:var(--blush-soft); display:flex; align-items:center; justify-content:center; cursor:pointer;
+    z-index:50;
   }
   .mag-edit-btn svg{ width:15px; height:15px; }
 
@@ -428,7 +429,7 @@
     <input type="file" accept="image/*" id="input-extra-photo" style="display:none;" onchange="onExtraPhotoChosen(this)">
 
     <div id="extra-cat-picker" style="display:none; width:100%; margin-top:10px;">
-      <select class="field-select" id="extra-cat-select"></select>
+      <input type="text" class="field-select" id="extra-cat-select" placeholder="Nom (optionnel, ex. Collier)">
       <button class="cta" onclick="confirmAddLayer()">Ajouter au collage</button>
     </div>
   </div>
@@ -1066,23 +1067,51 @@
       if(idx === editorSelected){
         const outline = document.createElement('div');
         outline.className = 'layer-selected-outline';
+        outline.id = 'editor-outline';
         outline.style.left = layer.x + 'px';
         outline.style.top = layer.y + 'px';
         outline.style.width = (layer.baseW*layer.scale) + 'px';
         outline.style.height = (layer.baseH*layer.scale) + 'px';
-        outline.style.zIndex = idx + 500;
+        outline.style.zIndex = 500;
         stage.appendChild(outline);
 
         const handle = document.createElement('div');
         handle.className = 'resize-handle';
+        handle.id = 'editor-handle';
         handle.style.left = (layer.x + layer.baseW*layer.scale - 9) + 'px';
         handle.style.top = (layer.y + layer.baseH*layer.scale - 9) + 'px';
-        handle.style.zIndex = idx + 501;
+        handle.style.zIndex = 501;
         handle.onpointerdown = (e) => { e.stopPropagation(); onResizeHandleDown(e, idx); };
         stage.appendChild(handle);
       }
     });
     document.getElementById('editeur-toolbar').style.display = editorSelected >= 0 ? 'block' : 'none';
+  }
+
+  // Met juste à jour les positions/tailles déjà à l'écran, sans recréer les
+  // éléments DOM — évite de "perdre" le doigt/la souris pendant un glisser.
+  function updateLayerDOM(idx){
+    const layer = editorLayers[idx];
+    const c = layer.canvas;
+    c.style.left = layer.x + 'px';
+    c.style.top = layer.y + 'px';
+    c.style.width = (layer.baseW*layer.scale) + 'px';
+    c.style.height = (layer.baseH*layer.scale) + 'px';
+
+    if(idx === editorSelected){
+      const outline = document.getElementById('editor-outline');
+      const handle = document.getElementById('editor-handle');
+      if(outline){
+        outline.style.left = layer.x + 'px';
+        outline.style.top = layer.y + 'px';
+        outline.style.width = (layer.baseW*layer.scale) + 'px';
+        outline.style.height = (layer.baseH*layer.scale) + 'px';
+      }
+      if(handle){
+        handle.style.left = (layer.x + layer.baseW*layer.scale - 9) + 'px';
+        handle.style.top = (layer.y + layer.baseH*layer.scale - 9) + 'px';
+      }
+    }
   }
 
   function selectLayer(idx){
@@ -1096,30 +1125,51 @@
     if(editorMode === 'deplacer'){
       editorDragging = { type:'move', idx, startX:e.clientX, startY:e.clientY, origX:editorLayers[idx].x, origY:editorLayers[idx].y };
     } else {
-      paintOnLayer(e, idx);
-      editorDragging = { type:'paint', idx };
+      const p = canvasPoint(e, editorLayers[idx]);
+      editorDragging = { type:'paint', idx, lastX:p.x, lastY:p.y };
+      paintStroke(idx, p.x, p.y, p.x, p.y);
     }
     e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId);
   }
 
-  function paintOnLayer(e, idx){
-    const layer = editorLayers[idx];
+  function canvasPoint(e, layer){
     const rect = layer.canvas.getBoundingClientRect();
-    const px = (e.clientX - rect.left) * (layer.canvas.width / rect.width);
-    const py = (e.clientY - rect.top) * (layer.canvas.height / rect.height);
-    const brush = parseInt(document.getElementById('brush-size').value, 10);
+    return {
+      x: (e.clientX - rect.left) * (layer.canvas.width / rect.width),
+      y: (e.clientY - rect.top) * (layer.canvas.height / rect.height)
+    };
+  }
+
+  // Trace un segment continu (et non des points isolés) entre deux positions,
+  // pour la gomme comme pour la restauration — évite l'effet "pointillés".
+  function paintStroke(idx, x1, y1, x2, y2){
+    const layer = editorLayers[idx];
     const ctx = layer.canvas.getContext('2d');
+    const brush = parseInt(document.getElementById('brush-size').value, 10);
 
     if(editorMode === 'gomme'){
       ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = brush;
       ctx.beginPath();
-      ctx.arc(px, py, brush/2, 0, Math.PI*2);
-      ctx.fill();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
       ctx.globalCompositeOperation = 'source-over';
     } else if(editorMode === 'restaurer'){
+      const r = brush/2;
+      const dx = x2-x1, dy = y2-y1;
+      const dist = Math.hypot(dx, dy) || 0.0001;
+      const nx = -dy/dist * r, ny = dx/dist * r;
       ctx.save();
       ctx.beginPath();
-      ctx.arc(px, py, brush/2, 0, Math.PI*2);
+      ctx.moveTo(x1+nx, y1+ny);
+      ctx.lineTo(x2+nx, y2+ny);
+      ctx.arc(x2, y2, r, Math.atan2(ny,nx), Math.atan2(-ny,-nx));
+      ctx.lineTo(x1-nx, y1-ny);
+      ctx.arc(x1, y1, r, Math.atan2(-ny,-nx), Math.atan2(ny,nx));
+      ctx.closePath();
       ctx.clip();
       ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
       ctx.drawImage(layer.origCanvas, 0, 0);
@@ -1139,13 +1189,16 @@
     if(editorDragging.type === 'move'){
       layer.x = editorDragging.origX + (e.clientX - editorDragging.startX);
       layer.y = editorDragging.origY + (e.clientY - editorDragging.startY);
-      renderEditorStage();
+      updateLayerDOM(editorDragging.idx);
     } else if(editorDragging.type === 'resize'){
       const newW = Math.max(30, editorDragging.origW + (e.clientX - editorDragging.startX));
       layer.scale = newW / layer.baseW;
-      renderEditorStage();
+      updateLayerDOM(editorDragging.idx);
     } else if(editorDragging.type === 'paint'){
-      paintOnLayer(e, editorDragging.idx);
+      const p = canvasPoint(e, layer);
+      paintStroke(editorDragging.idx, editorDragging.lastX, editorDragging.lastY, p.x, p.y);
+      editorDragging.lastX = p.x;
+      editorDragging.lastY = p.y;
     }
   });
   window.addEventListener('pointerup', () => { editorDragging = null; });
@@ -1182,13 +1235,12 @@
     const file = input.files[0];
     if(!file) return;
     pendingExtraFile = file;
-    const select = document.getElementById('extra-cat-select');
-    select.innerHTML = categories.map(c => '<option value="'+c.nom+'">'+c.nom+'</option>').join('') + '<option value="Autre">Autre</option>';
+    document.getElementById('extra-cat-select').value = '';
     document.getElementById('extra-cat-picker').style.display = 'block';
   }
 
   function confirmAddLayer(){
-    const label = document.getElementById('extra-cat-select').value;
+    const label = document.getElementById('extra-cat-select').value.trim() || 'Autre';
     const file = pendingExtraFile;
     if(!file) return;
     const objectUrl = URL.createObjectURL(file);
