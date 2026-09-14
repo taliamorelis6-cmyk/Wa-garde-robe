@@ -247,7 +247,7 @@
   .layer-selected-outline{ position:absolute; border:2px dashed var(--raspberry); pointer-events:none; border-radius:4px; }
   .resize-handle{
     position:absolute; width:18px; height:18px; background:var(--raspberry); border:2px solid #fff;
-    border-radius:50%; cursor:nwse-resize; box-shadow:0 2px 5px rgba(58,21,38,0.2);
+    border-radius:50%; cursor:nwse-resize; box-shadow:0 2px 5px rgba(58,21,38,0.2); touch-action:none;
   }
   .mag-composition-wrapper{ position:absolute; top:0; left:0; width:280px; height:380px; transform-origin:top left; }
   .mag-piece{ display:flex; flex-direction:column; align-items:center; gap:4px; }
@@ -431,6 +431,7 @@
     <div id="extra-cat-picker" style="display:none; width:100%; margin-top:10px;">
       <input type="text" class="field-select" id="extra-cat-select" placeholder="Nom (optionnel, ex. Collier)">
       <button class="cta" onclick="confirmAddLayer()">Ajouter au collage</button>
+      <p class="msg" id="extra-msg"></p>
     </div>
   </div>
 
@@ -1018,28 +1019,60 @@
 
     const piecePromises = catsInLook.map((cat, i) => {
       const item = getItemById(look.items[cat.id]);
-      const url = item ? (item.photoPlatURL || item.photoPorteeURL) : null;
-      if(!url) return Promise.resolve(null);
+      const originalUrl = item ? (item.photoPlatURL || item.photoPorteeURL) : null;
+      if(!originalUrl) return Promise.resolve(null);
       const saved = comp && comp[cat.id];
-      const srcToLoad = saved ? saved.imageURL : url;
-      return loadImagePromise(srcToLoad).then(img => {
-        const { canvas, origCanvas, baseW, baseH } = makeLayerCanvases(img, 220);
-        return {
-          key: cat.id, label: cat.nom, canvas, origCanvas, baseW, baseH,
-          x: saved ? saved.x : 24 + i*16,
-          y: saved ? saved.y : 24 + i*16,
-          scale: saved ? saved.width / baseW : 0.85
-        };
-      }).catch(() => null);
+      const workingUrl = saved ? saved.imageURL : originalUrl;
+
+      // origImg = la vraie photo intacte (jamais modifiée) -> sert de réserve pour "Restaurer"
+      // workImg = la version affichée/éditée jusqu'ici (avec les gommages précédents)
+      return Promise.all([loadImagePromise(originalUrl), loadImagePromise(workingUrl)])
+        .then(([origImg, workImg]) => {
+          let baseW, baseH;
+          if(origImg.naturalWidth >= origImg.naturalHeight){
+            baseW = 220; baseH = Math.round(220 * origImg.naturalHeight / origImg.naturalWidth);
+          } else {
+            baseH = 220; baseW = Math.round(220 * origImg.naturalWidth / origImg.naturalHeight);
+          }
+          const origCanvas = document.createElement('canvas');
+          origCanvas.width = baseW; origCanvas.height = baseH;
+          origCanvas.getContext('2d').drawImage(origImg, 0, 0, baseW, baseH);
+
+          const canvas = document.createElement('canvas');
+          canvas.width = baseW; canvas.height = baseH;
+          canvas.getContext('2d').drawImage(workImg, 0, 0, baseW, baseH);
+
+          return {
+            key: cat.id, label: cat.nom, canvas, origCanvas, baseW, baseH,
+            x: saved ? saved.x : 24 + i*16,
+            y: saved ? saved.y : 24 + i*16,
+            scale: saved ? saved.width / baseW : 0.85
+          };
+        }).catch(() => null);
     });
 
     const extraKeys = comp ? Object.keys(comp).filter(k => k.indexOf('extra_') === 0) : [];
     const extraPromises = extraKeys.map(k => {
       const c = comp[k];
-      return loadImagePromise(c.imageURL).then(img => {
-        const { canvas, origCanvas, baseW, baseH } = makeLayerCanvases(img, 200);
-        return { key:k, label:c.label||'Autre', canvas, origCanvas, baseW, baseH, x:c.x, y:c.y, scale:c.width/baseW };
-      }).catch(() => null);
+      const originalUrl = c.originalURL || c.imageURL; // repli si ancien format sans originalURL
+      return Promise.all([loadImagePromise(originalUrl), loadImagePromise(c.imageURL)])
+        .then(([origImg, workImg]) => {
+          let baseW, baseH;
+          if(origImg.naturalWidth >= origImg.naturalHeight){
+            baseW = 200; baseH = Math.round(200 * origImg.naturalHeight / origImg.naturalWidth);
+          } else {
+            baseH = 200; baseW = Math.round(200 * origImg.naturalWidth / origImg.naturalHeight);
+          }
+          const origCanvas = document.createElement('canvas');
+          origCanvas.width = baseW; origCanvas.height = baseH;
+          origCanvas.getContext('2d').drawImage(origImg, 0, 0, baseW, baseH);
+
+          const canvas = document.createElement('canvas');
+          canvas.width = baseW; canvas.height = baseH;
+          canvas.getContext('2d').drawImage(workImg, 0, 0, baseW, baseH);
+
+          return { key:k, label:c.label||'Autre', canvas, origCanvas, baseW, baseH, x:c.x, y:c.y, scale:c.width/baseW };
+        }).catch(() => null);
     });
 
     Promise.all(piecePromises.concat(extraPromises)).then(results => {
@@ -1174,6 +1207,16 @@
       ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
       ctx.drawImage(layer.origCanvas, 0, 0);
       ctx.restore();
+
+      // disque plein au point d'arrivée : comble les angles serrés que la
+      // bande seule peut manquer (source des petits cercles résiduels)
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x2, y2, r, 0, Math.PI*2);
+      ctx.clip();
+      ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+      ctx.drawImage(layer.origCanvas, 0, 0);
+      ctx.restore();
     }
   }
 
@@ -1242,7 +1285,13 @@
   function confirmAddLayer(){
     const label = document.getElementById('extra-cat-select').value.trim() || 'Autre';
     const file = pendingExtraFile;
-    if(!file) return;
+    const msg = document.getElementById('extra-msg');
+    if(!file){
+      msg.textContent = "Choisis d'abord une photo.";
+      msg.className = 'msg error';
+      return;
+    }
+    msg.textContent = '';
     const objectUrl = URL.createObjectURL(file);
     loadImagePromise(objectUrl).then(img => {
       const { canvas, origCanvas, baseW, baseH } = makeLayerCanvases(img, 180);
@@ -1251,6 +1300,10 @@
       document.getElementById('extra-cat-picker').style.display = 'none';
       document.getElementById('input-extra-photo').value = '';
       selectLayer(editorLayers.length - 1);
+    }).catch(() => {
+      URL.revokeObjectURL(objectUrl);
+      msg.textContent = "Impossible de charger cette photo (format non supporté ?) — essaie une autre photo.";
+      msg.className = 'msg error';
     });
   }
 
@@ -1259,14 +1312,24 @@
   }
 
   async function saveEditeurComposition(){
+    const look = looks[currentLookIndex];
+    const prevComp = (look && look.composition) || {};
     const composition = {};
     editorLayers.forEach((layer, idx) => {
-      composition[layer.key] = {
+      const entry = {
         imageURL: layer.canvas.toDataURL('image/png'),
         x: layer.x, y: layer.y,
         width: layer.baseW*layer.scale, height: layer.baseH*layer.scale,
         z: idx, label: layer.label
       };
+      if(layer.key.indexOf('extra_') === 0){
+        // La photo pristine d'une photo supplémentaire n'est enregistrée
+        // qu'une seule fois, jamais réécrite ensuite — sinon "Restaurer"
+        // n'aurait plus rien à récupérer après une 2e modification.
+        entry.originalURL = (prevComp[layer.key] && prevComp[layer.key].originalURL)
+          || layer.origCanvas.toDataURL('image/png');
+      }
+      composition[layer.key] = entry;
     });
     await db.collection('utilisatrices').doc(currentUid).collection('looks').doc(editorLookId).update({ composition });
     await loadLooks();
