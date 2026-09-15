@@ -186,6 +186,22 @@
     background:#fff; border:1px solid var(--line); border-radius:12px;
     padding:10px 14px; margin-bottom:8px; font-size:0.85rem; font-weight:500;
   }
+  .trier-section-title{
+    font-family:'Fraunces',serif; font-style:italic; font-size:0.95rem; color:var(--plum);
+    margin:16px 0 8px; align-self:flex-start;
+  }
+  .vet-row{
+    display:flex; align-items:center; gap:10px; width:100%;
+    background:#fff; border:1px solid var(--line); border-radius:12px;
+    padding:8px 10px; margin-bottom:8px;
+  }
+  .vet-row img{ width:44px; height:44px; object-fit:cover; border-radius:8px; flex-shrink:0; }
+  .vet-row .vet-name{ flex:1; font-size:0.8rem; font-weight:500; color:var(--ink); }
+  .trash-btn{
+    width:30px; height:30px; border-radius:50%; background:var(--blush-soft);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
+  }
+  .trash-btn svg{ width:14px; height:14px; }
   .switch{ position:relative; width:42px; height:24px; flex-shrink:0; }
   .switch input{ opacity:0; width:0; height:0; }
   .switch .slider{ position:absolute; inset:0; background:#E7DAD4; border-radius:100px; cursor:pointer; transition:.2s; }
@@ -455,8 +471,23 @@
     </div>
     <p class="msg" id="categorie-msg"></p>
 
+    <div class="link-row" onclick="showScreen('screen-trier')" style="cursor:pointer;">Trier le placard <span>›</span></div>
+
     <p class="empty-note">Le thème de couleurs, le Mode Mémère et le reste des réglages arriveront ici à une prochaine étape.</p>
     <button class="cta secondary" onclick="logout()">Se déconnecter</button>
+  </div>
+
+  <!-- ============ TRIER LE PLACARD (supprimer / réordonner les vêtements) ============ -->
+  <div class="screen app-shell" id="screen-trier" style="align-items:center;">
+    <div class="topbar">
+      <div class="icon-btn" onclick="showScreen('screen-reglages')" title="Retour">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </div>
+      <span class="screen-title">Trier le placard</span>
+      <span style="width:38px;"></span>
+    </div>
+    <p class="empty-note" style="padding-bottom:6px;">Réordonne ou supprime tes vêtements, catégorie par catégorie.</p>
+    <div id="trier-content" style="width:100%; overflow-y:auto;"></div>
   </div>
 
 <script>
@@ -560,6 +591,7 @@
   const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l6 6L20 6"/></svg>';
   const HEART_SVG = '<svg viewBox="0 0 24 24" fill="#fff" stroke="#fff" stroke-width="1.5"><path d="M12 21s-7.5-4.9-10-9.3C.4 8.3 2 4.5 5.6 4c2-.3 3.9.6 4.9 2.2C11.5 4.6 13.4 3.7 15.4 4c3.6.5 5.2 4.3 3.6 7.7C16.5 16.1 12 21 12 21z"/></svg>';
   const PENCIL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+  const TRASH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#AD2049" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>';
 
   const DEFAULT_CATEGORIES = ['Coiffures','Hauts','Bas','Chaussures'];
 
@@ -590,6 +622,9 @@
       const data = { id:d.id, ...d.data() };
       if(!itemsByCategory[data.categorieId]) itemsByCategory[data.categorieId] = [];
       itemsByCategory[data.categorieId].push(data);
+    });
+    Object.keys(itemsByCategory).forEach(catId => {
+      itemsByCategory[catId].sort((a,b) => (a.ordre||0) - (b.ordre||0));
     });
 
     categories.forEach(c => { if(indexByCategory[c.id] === undefined) indexByCategory[c.id] = 0; });
@@ -863,6 +898,7 @@
       const data = {
         categorieId: pendingCategoryForAdd,
         nom: nom || null,
+        ordre: (itemsByCategory[pendingCategoryForAdd] || []).length,
         creeLe: firebase.firestore.FieldValue.serverTimestamp()
       };
       if(croppedPorteeDataURL) data.photoPorteeURL = croppedPorteeDataURL;
@@ -1402,11 +1438,81 @@
     renderHabillage();
   }
 
+  function renderTrierPlacard(){
+    const content = document.getElementById('trier-content');
+    content.innerHTML = '';
+
+    categories.forEach(cat => {
+      const items = itemsByCategory[cat.id] || [];
+      const title = document.createElement('p');
+      title.className = 'trier-section-title';
+      title.textContent = cat.nom + ' (' + items.length + ')';
+      content.appendChild(title);
+
+      if(items.length === 0){
+        const empty = document.createElement('p');
+        empty.className = 'empty-note';
+        empty.style.padding = '0 0 6px';
+        empty.style.textAlign = 'left';
+        empty.textContent = 'Rien ici pour l\'instant.';
+        content.appendChild(empty);
+        return;
+      }
+
+      items.forEach((item, idx) => {
+        const row = document.createElement('div');
+        row.className = 'vet-row';
+        const url = item.photoPorteeURL || item.photoPlatURL;
+        row.innerHTML =
+          '<img src="'+url+'" alt="">'+
+          '<span class="vet-name">'+(item.nom || 'Sans nom')+'</span>'+
+          '<div class="reorder-btn'+(idx===0 ? ' disabled' : '')+'" onclick="moveVetement(\''+cat.id+'\',\''+item.id+'\',-1)">'+CHEVRON_UP_SVG+'</div>'+
+          '<div class="reorder-btn'+(idx===items.length-1 ? ' disabled' : '')+'" onclick="moveVetement(\''+cat.id+'\',\''+item.id+'\',1)">'+CHEVRON_DOWN_SVG+'</div>'+
+          '<div class="trash-btn" onclick="deleteVetement(\''+item.id+'\',\''+cat.nom+'\')" title="Supprimer">'+TRASH_SVG+'</div>';
+        content.appendChild(row);
+      });
+    });
+
+    if(categories.every(c => (itemsByCategory[c.id] || []).length === 0)){
+      content.innerHTML = '<p class="empty-note">Ta garde-robe est vide pour l\'instant.</p>';
+    }
+  }
+
+  async function moveVetement(catId, itemId, dir){
+    const items = itemsByCategory[catId] || [];
+    const idx = items.findIndex(it => it.id === itemId);
+    const swapIdx = idx + dir;
+    if(idx < 0 || swapIdx < 0 || swapIdx >= items.length) return;
+
+    const a = items[idx], b = items[swapIdx];
+    const batch = db.batch();
+    const colRef = db.collection('utilisatrices').doc(currentUid).collection('vetements');
+    batch.update(colRef.doc(a.id), { ordre: b.ordre || 0 });
+    batch.update(colRef.doc(b.id), { ordre: a.ordre || 0 });
+    await batch.commit();
+
+    await loadCategoriesAndItems(currentUid);
+    renderTrierPlacard();
+    renderHabillage();
+  }
+
+  async function deleteVetement(itemId, catNom){
+    const item = getItemById(itemId);
+    const label = item && item.nom ? item.nom : ('ce vêtement dans ' + catNom);
+    if(!confirm('Supprimer ' + label + ' ? Cette action est définitive.')) return;
+
+    await db.collection('utilisatrices').doc(currentUid).collection('vetements').doc(itemId).delete();
+    await loadCategoriesAndItems(currentUid);
+    renderTrierPlacard();
+    renderHabillage();
+  }
+
   function showScreen(id){
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
     if(id === 'screen-armoire'){ loadLooks().then(renderArmoire); }
     if(id === 'screen-reglages') renderCategoriesManager();
+    if(id === 'screen-trier') renderTrierPlacard();
   }
 
   async function initApp(user, pseudo){
