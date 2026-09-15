@@ -390,7 +390,7 @@
   <!-- ============ ARMOIRE (compteur pour l'instant, magazine à la prochaine étape) ============ -->
   <div class="screen app-shell" id="screen-armoire" style="align-items:center;">
     <div class="topbar">
-      <div class="icon-btn" onclick="showScreen('screen-habillage')" title="Retour">
+      <div class="icon-btn" onclick="armoireBack()" title="Retour">
         <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
       </div>
       <span class="screen-title">Armoire</span>
@@ -1503,6 +1503,8 @@
 
   let pendingDeleteItemId = null;
   let pendingDeleteAffectedLooks = [];
+  let armoireBackTarget = 'screen-habillage';
+  let reopenDeleteModalOnBack = false;
 
   async function deleteVetement(itemId, catNom){
     const item = getItemById(itemId);
@@ -1538,7 +1540,20 @@
   function previewLookFromDelete(idx){
     closeDeleteModal();
     currentLookIndex = idx;
+    armoireBackTarget = 'screen-trier';
+    reopenDeleteModalOnBack = true;
     showScreen('screen-armoire');
+  }
+
+  function armoireBack(){
+    const target = armoireBackTarget;
+    const reopen = reopenDeleteModalOnBack;
+    armoireBackTarget = 'screen-habillage';
+    reopenDeleteModalOnBack = false;
+    showScreen(target);
+    if(reopen && pendingDeleteItemId){
+      document.getElementById('delete-modal-overlay').style.display = 'flex';
+    }
   }
 
   function closeDeleteModal(){
