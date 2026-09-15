@@ -980,22 +980,53 @@
   let editorDragging = null;
   let pendingExtraFile = null;
 
-  function makeLayerCanvases(img, targetLong){
+  // Construit un calque à partir de deux images : la photo intacte (origImg,
+  // jamais modifiée) et la version de travail actuelle (workImg, avec les
+  // gommages déjà faits). Le "masque" garde en mémoire ce qui est visible ou
+  // pas ; le canvas affiché est recalculé à partir de l'original + du masque,
+  // ce qui évite tout empilement de bords adoucis (source des anneaux).
+  function buildLayer(key, label, origImg, workImg, targetLong, savedPos){
     let baseW, baseH;
-    if(img.naturalWidth >= img.naturalHeight){
-      baseW = targetLong; baseH = Math.round(targetLong * img.naturalHeight / img.naturalWidth);
+    if(origImg.naturalWidth >= origImg.naturalHeight){
+      baseW = targetLong; baseH = Math.round(targetLong * origImg.naturalHeight / origImg.naturalWidth);
     } else {
-      baseH = targetLong; baseW = Math.round(targetLong * img.naturalWidth / img.naturalHeight);
+      baseH = targetLong; baseW = Math.round(targetLong * origImg.naturalWidth / origImg.naturalHeight);
     }
-    const canvas = document.createElement('canvas');
-    canvas.width = baseW; canvas.height = baseH;
-    canvas.getContext('2d').drawImage(img, 0, 0, baseW, baseH);
 
     const origCanvas = document.createElement('canvas');
     origCanvas.width = baseW; origCanvas.height = baseH;
-    origCanvas.getContext('2d').drawImage(img, 0, 0, baseW, baseH);
+    origCanvas.getContext('2d').drawImage(origImg, 0, 0, baseW, baseH);
 
-    return { canvas, origCanvas, baseW, baseH };
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = baseW; maskCanvas.height = baseH;
+    const mctx = maskCanvas.getContext('2d');
+    if(workImg){
+      mctx.drawImage(workImg, 0, 0, baseW, baseH); // hérite exactement des gommages déjà faits
+    } else {
+      mctx.fillStyle = '#fff';
+      mctx.fillRect(0, 0, baseW, baseH);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = baseW; canvas.height = baseH;
+
+    const layer = { key, label, canvas, origCanvas, maskCanvas, baseW, baseH,
+      x: savedPos ? savedPos.x : 24, y: savedPos ? savedPos.y : 24,
+      scale: savedPos ? savedPos.scale : 0.85
+    };
+    redrawWorkingCanvas(layer);
+    return layer;
+  }
+
+  // Recompose le canvas affiché = photo d'origine, découpée par le masque.
+  function redrawWorkingCanvas(layer){
+    const ctx = layer.canvas.getContext('2d');
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.clearRect(0, 0, layer.baseW, layer.baseH);
+    ctx.drawImage(layer.origCanvas, 0, 0);
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(layer.maskCanvas, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
   }
 
   function loadImagePromise(src){
@@ -1022,33 +1053,18 @@
       const originalUrl = item ? (item.photoPlatURL || item.photoPorteeURL) : null;
       if(!originalUrl) return Promise.resolve(null);
       const saved = comp && comp[cat.id];
-      const workingUrl = saved ? saved.imageURL : originalUrl;
+      const workingUrl = saved ? saved.imageURL : null;
 
-      // origImg = la vraie photo intacte (jamais modifiée) -> sert de réserve pour "Restaurer"
-      // workImg = la version affichée/éditée jusqu'ici (avec les gommages précédents)
-      return Promise.all([loadImagePromise(originalUrl), loadImagePromise(workingUrl)])
-        .then(([origImg, workImg]) => {
-          let baseW, baseH;
-          if(origImg.naturalWidth >= origImg.naturalHeight){
-            baseW = 220; baseH = Math.round(220 * origImg.naturalHeight / origImg.naturalWidth);
-          } else {
-            baseH = 220; baseW = Math.round(220 * origImg.naturalWidth / origImg.naturalHeight);
-          }
-          const origCanvas = document.createElement('canvas');
-          origCanvas.width = baseW; origCanvas.height = baseH;
-          origCanvas.getContext('2d').drawImage(origImg, 0, 0, baseW, baseH);
+      const loads = [loadImagePromise(originalUrl)];
+      if(workingUrl) loads.push(loadImagePromise(workingUrl));
 
-          const canvas = document.createElement('canvas');
-          canvas.width = baseW; canvas.height = baseH;
-          canvas.getContext('2d').drawImage(workImg, 0, 0, baseW, baseH);
-
-          return {
-            key: cat.id, label: cat.nom, canvas, origCanvas, baseW, baseH,
-            x: saved ? saved.x : 24 + i*16,
-            y: saved ? saved.y : 24 + i*16,
-            scale: saved ? saved.width / baseW : 0.85
-          };
-        }).catch(() => null);
+      return Promise.all(loads).then(([origImg, workImg]) => {
+        return buildLayer(cat.id, cat.nom, origImg, workImg || null, 220, {
+          x: saved ? saved.x : 24 + i*16,
+          y: saved ? saved.y : 24 + i*16,
+          scale: saved ? saved.width / 220 : 0.85
+        });
+      }).catch(() => null);
     });
 
     const extraKeys = comp ? Object.keys(comp).filter(k => k.indexOf('extra_') === 0) : [];
@@ -1057,21 +1073,7 @@
       const originalUrl = c.originalURL || c.imageURL; // repli si ancien format sans originalURL
       return Promise.all([loadImagePromise(originalUrl), loadImagePromise(c.imageURL)])
         .then(([origImg, workImg]) => {
-          let baseW, baseH;
-          if(origImg.naturalWidth >= origImg.naturalHeight){
-            baseW = 200; baseH = Math.round(200 * origImg.naturalHeight / origImg.naturalWidth);
-          } else {
-            baseH = 200; baseW = Math.round(200 * origImg.naturalWidth / origImg.naturalHeight);
-          }
-          const origCanvas = document.createElement('canvas');
-          origCanvas.width = baseW; origCanvas.height = baseH;
-          origCanvas.getContext('2d').drawImage(origImg, 0, 0, baseW, baseH);
-
-          const canvas = document.createElement('canvas');
-          canvas.width = baseW; canvas.height = baseH;
-          canvas.getContext('2d').drawImage(workImg, 0, 0, baseW, baseH);
-
-          return { key:k, label:c.label||'Autre', canvas, origCanvas, baseW, baseH, x:c.x, y:c.y, scale:c.width/baseW };
+          return buildLayer(k, c.label || 'Autre', origImg, workImg, 200, { x:c.x, y:c.y, scale:c.width/200 });
         }).catch(() => null);
     });
 
@@ -1177,47 +1179,37 @@
   // pour la gomme comme pour la restauration — évite l'effet "pointillés".
   function paintStroke(idx, x1, y1, x2, y2){
     const layer = editorLayers[idx];
-    const ctx = layer.canvas.getContext('2d');
+    const mctx = layer.maskCanvas.getContext('2d');
     const brush = parseInt(document.getElementById('brush-size').value, 10);
 
-    if(editorMode === 'gomme'){
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = brush;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-      ctx.globalCompositeOperation = 'source-over';
-    } else if(editorMode === 'restaurer'){
-      const r = brush/2;
-      const dx = x2-x1, dy = y2-y1;
-      const dist = Math.hypot(dx, dy) || 0.0001;
-      const nx = -dy/dist * r, ny = dx/dist * r;
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(x1+nx, y1+ny);
-      ctx.lineTo(x2+nx, y2+ny);
-      ctx.arc(x2, y2, r, Math.atan2(ny,nx), Math.atan2(-ny,-nx));
-      ctx.lineTo(x1-nx, y1-ny);
-      ctx.arc(x1, y1, r, Math.atan2(-ny,-nx), Math.atan2(ny,nx));
-      ctx.closePath();
-      ctx.clip();
-      ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
-      ctx.drawImage(layer.origCanvas, 0, 0);
-      ctx.restore();
+    mctx.lineCap = 'round';
+    mctx.lineJoin = 'round';
+    mctx.lineWidth = brush;
 
-      // disque plein au point d'arrivée : comble les angles serrés que la
-      // bande seule peut manquer (source des petits cercles résiduels)
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(x2, y2, r, 0, Math.PI*2);
-      ctx.clip();
-      ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
-      ctx.drawImage(layer.origCanvas, 0, 0);
-      ctx.restore();
+    if(editorMode === 'gomme'){
+      mctx.globalCompositeOperation = 'destination-out';
+      mctx.beginPath();
+      mctx.moveTo(x1, y1);
+      mctx.lineTo(x2, y2);
+      mctx.stroke();
+      mctx.beginPath();
+      mctx.arc(x1, y1, brush/2, 0, Math.PI*2);
+      mctx.fill();
+      mctx.globalCompositeOperation = 'source-over';
+    } else if(editorMode === 'restaurer'){
+      mctx.globalCompositeOperation = 'source-over';
+      mctx.strokeStyle = '#ffffff';
+      mctx.fillStyle = '#ffffff';
+      mctx.beginPath();
+      mctx.moveTo(x1, y1);
+      mctx.lineTo(x2, y2);
+      mctx.stroke();
+      mctx.beginPath();
+      mctx.arc(x1, y1, brush/2, 0, Math.PI*2);
+      mctx.fill();
     }
+
+    redrawWorkingCanvas(layer);
   }
 
   function onResizeHandleDown(e, idx){
@@ -1294,8 +1286,8 @@
     msg.textContent = '';
     const objectUrl = URL.createObjectURL(file);
     loadImagePromise(objectUrl).then(img => {
-      const { canvas, origCanvas, baseW, baseH } = makeLayerCanvases(img, 180);
-      editorLayers.push({ key:'extra_'+Date.now(), label, canvas, origCanvas, baseW, baseH, x:50, y:50, scale:0.9 });
+      const layer = buildLayer('extra_'+Date.now(), label, img, null, 180, { x:50, y:50, scale:0.9 });
+      editorLayers.push(layer);
       URL.revokeObjectURL(objectUrl);
       document.getElementById('extra-cat-picker').style.display = 'none';
       document.getElementById('input-extra-photo').value = '';
