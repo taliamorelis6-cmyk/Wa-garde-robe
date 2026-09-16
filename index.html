@@ -314,7 +314,7 @@
     <div class="photo-stack" id="photo-stack"></div>
 
     <div class="bottombar">
-      <div class="icon-btn" onclick="openShuffleModal()" title="Mélanger">
+      <div class="icon-btn" onpointerdown="shufflePointerDown()" onpointerup="shufflePointerUp()" onpointerleave="shufflePointerCancel()" onpointercancel="shufflePointerCancel()" oncontextmenu="return false;" title="Tap : remélanger — Appui long : choisir les catégories">
         <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.2" fill="#3A1526"/><circle cx="16" cy="8" r="1.2" fill="#3A1526"/><circle cx="8" cy="16" r="1.2" fill="#3A1526"/><circle cx="16" cy="16" r="1.2" fill="#3A1526"/><circle cx="12" cy="12" r="1.2" fill="#3A1526"/></svg>
       </div>
       <button class="fab" onclick="openAddScreen()" title="Ajouter un vêtement">
@@ -1571,18 +1571,67 @@
     document.getElementById('delete-modal-overlay').style.display = 'none';
   }
 
+  let lastShuffleCategoryIds = null;
+  let shuffleLongPressTimer = null;
+  let shuffleLongPressTriggered = false;
+
+  function shufflePointerDown(){
+    shuffleLongPressTriggered = false;
+    shuffleLongPressTimer = setTimeout(() => {
+      shuffleLongPressTriggered = true;
+      openShuffleModal();
+    }, 450);
+  }
+  function shufflePointerUp(){
+    clearTimeout(shuffleLongPressTimer);
+    if(!shuffleLongPressTriggered) quickShuffle();
+  }
+  function shufflePointerCancel(){
+    clearTimeout(shuffleLongPressTimer);
+  }
+
+  function eligibleShuffleCatIds(){
+    return categories.filter(c => c.affichee !== false && (itemsByCategory[c.id] || []).length > 1).map(c => c.id);
+  }
+
+  function quickShuffle(){
+    let ids = lastShuffleCategoryIds;
+    if(!ids || ids.length === 0){
+      ids = eligibleShuffleCatIds();
+    }
+    // on retire celles qui ne seraient plus valables (catégorie cachée/supprimée depuis)
+    ids = ids.filter(id => eligibleShuffleCatIds().includes(id));
+    if(ids.length === 0){ openShuffleModal(); return; }
+    applyShuffle(ids);
+  }
+
+  function applyShuffle(ids){
+    ids.forEach(catId => {
+      const items = itemsByCategory[catId] || [];
+      if(items.length <= 1) return;
+      const current = indexByCategory[catId] || 0;
+      let newIdx;
+      do {
+        newIdx = Math.floor(Math.random() * items.length);
+      } while(newIdx === current);
+      indexByCategory[catId] = newIdx;
+    });
+    renderHabillage();
+  }
+
   function openShuffleModal(){
     const list = document.getElementById('shuffle-cat-list');
     const visibles = categories.filter(c => c.affichee !== false && (itemsByCategory[c.id] || []).length > 1);
     if(visibles.length === 0){
       list.innerHTML = '<p class="empty-note" style="padding:0; text-align:left;">Il te faut au moins 2 pièces dans une catégorie affichée pour pouvoir mélanger.</p>';
     } else {
-      list.innerHTML = visibles.map(cat =>
-        '<label style="display:flex; align-items:center; gap:10px; font-size:0.85rem; font-weight:500;">'+
-          '<input type="checkbox" checked value="'+cat.id+'" class="shuffle-check" style="width:18px; height:18px;">'+
+      list.innerHTML = visibles.map(cat => {
+        const wasChecked = lastShuffleCategoryIds ? lastShuffleCategoryIds.includes(cat.id) : true;
+        return '<label style="display:flex; align-items:center; gap:10px; font-size:0.85rem; font-weight:500;">'+
+          '<input type="checkbox" '+(wasChecked ? 'checked' : '')+' value="'+cat.id+'" class="shuffle-check" style="width:18px; height:18px;">'+
           cat.nom +
-        '</label>'
-      ).join('');
+        '</label>';
+      }).join('');
     }
     document.getElementById('shuffle-modal-overlay').style.display = 'flex';
   }
@@ -1593,18 +1642,9 @@
 
   function doShuffle(){
     const checked = Array.from(document.querySelectorAll('.shuffle-check:checked')).map(el => el.value);
-    checked.forEach(catId => {
-      const items = itemsByCategory[catId] || [];
-      if(items.length <= 1) return;
-      const current = indexByCategory[catId] || 0;
-      let newIdx;
-      do {
-        newIdx = Math.floor(Math.random() * items.length);
-      } while(newIdx === current);
-      indexByCategory[catId] = newIdx;
-    });
+    lastShuffleCategoryIds = checked;
     closeShuffleModal();
-    renderHabillage();
+    applyShuffle(checked);
   }
 
   async function confirmDeleteChoice(choice){
