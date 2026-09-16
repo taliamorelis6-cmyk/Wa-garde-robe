@@ -208,6 +208,17 @@
   .switch .slider:before{ content:""; position:absolute; height:18px; width:18px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; }
   .switch input:checked + .slider{ background:var(--raspberry); }
   .switch input:checked + .slider:before{ transform:translateX(18px); }
+  .toggle-row{ display:flex; align-items:center; justify-content:space-between; padding:2px 0 16px; }
+  .toggle-row .t-text{ display:flex; flex-direction:column; gap:2px; padding-right:10px; }
+  .toggle-row .t-text small{ color:var(--ink-soft); font-weight:400; font-size:0.7rem; line-height:1.3; }
+  .theme-card{
+    flex:1; border:2px solid var(--line); border-radius:14px; padding:10px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; gap:6px; background:#fff;
+  }
+  .theme-card.selected{ border-color:var(--raspberry); }
+  .theme-card .dots{ display:flex; gap:4px; }
+  .theme-card .dot{ width:16px; height:16px; border-radius:50%; }
+  .theme-card span{ font-size:0.68rem; font-weight:600; color:var(--ink-soft); }
   .reorder-btn{
     width:26px; height:26px; border-radius:50%; background:var(--blush-soft);
     display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
@@ -297,6 +308,13 @@
 
     <button class="cta" id="btn-submit" onclick="submitAuth()">Se connecter</button>
     <p class="msg" id="auth-msg"></p>
+  </div>
+
+  <!-- ============ BIENVENUE (Mode Mémère) ============ -->
+  <div class="screen" id="screen-bienvenue" style="align-items:center; justify-content:center; text-align:center; padding:32px;">
+    <p class="logo" style="font-size:2.6rem;">Wa</p>
+    <p id="memere-phrase" style="font-family:'Fraunces',serif; font-style:italic; font-weight:500; font-size:1.3rem; color:var(--plum); line-height:1.4; margin:14px 0 24px;"></p>
+    <button class="cta" onclick="continueFromBienvenue()">Continuer</button>
   </div>
 
   <!-- ============ HABILLAGE ============ -->
@@ -462,6 +480,21 @@
     </div>
     <p class="empty-note" style="padding-bottom:6px;">Choisis les catégories à afficher dans l'habillage, ou ajoutes-en de nouvelles.</p>
 
+    <p class="section-title" style="margin-top:0;">Mode Mémère</p>
+    <div class="toggle-row" style="width:100%;">
+      <div class="t-text">
+        <span>Activé</span>
+        <small>Message d'accueil perso à chaque visite + "Tenues validées par la mère" dans l'armoire</small>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="memere-toggle" checked onchange="toggleModeMemere(this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <p class="section-title">Thème</p>
+    <div id="theme-cards" style="display:flex; gap:10px; width:100%; margin-bottom:6px;"></div>
+
     <p class="section-title">Tes catégories</p>
     <div id="categories-list" style="width:100%;"></div>
 
@@ -620,6 +653,104 @@
   const HEART_SVG = '<svg viewBox="0 0 24 24" fill="#fff" stroke="#fff" stroke-width="1.5"><path d="M12 21s-7.5-4.9-10-9.3C.4 8.3 2 4.5 5.6 4c2-.3 3.9.6 4.9 2.2C11.5 4.6 13.4 3.7 15.4 4c3.6.5 5.2 4.3 3.6 7.7C16.5 16.1 12 21 12 21z"/></svg>';
   const PENCIL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
   const TRASH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#AD2049" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>';
+
+  const MEMERE_PHRASES = [
+    "Bienvenue dans ta garde-robe numérique ma mémère",
+    "Coucou Mémère",
+    "Comment elle va s'habiller aujourd'hui ?",
+    "Qu'importe comment tu t'habilles aujourd'hui, tu seras sublimes !",
+    "Coucou, je t'aime",
+    "Miroir, mon beau miroir qui est la plus belle ?<br>— C'est la mémère bien sûr !",
+    "Mais quelle beauté s'apprête à s'apprêter ?",
+    "En mode sexy chic ou tranquille mais jolie ?",
+    "Jolie Mémère",
+    "Splendide Mémère",
+    "Fabuleuse Mémère",
+    "Fifille t'attends pour un bisous",
+    "Un petit sourire pour égayer cette journée mère ?",
+    "Coucouuuu :)",
+    "Alala mais quelle jolie petite dame"
+  ];
+
+  const THEME_PRESETS = {
+    framboise: { nom:'Framboise', cream:'#FBF6F2', raspberry:'#D42A5D', raspberryDark:'#AD2049', blush:'#F6D7E1', blushSoft:'#FBEAEF', plum:'#3A1526' },
+    sauge:     { nom:'Sauge',     cream:'#F7F7F0', raspberry:'#6B8E63', raspberryDark:'#4F6B49', blush:'#E4EBDD', blushSoft:'#F1F5EC', plum:'#1F2E1C' },
+    bleuNuit:  { nom:'Bleu nuit', cream:'#F3F6FA', raspberry:'#3B6FA0', raspberryDark:'#2A527A', blush:'#DCE8F2', blushSoft:'#EEF4FA', plum:'#142433' }
+  };
+
+  let modeMemereActive = true;
+  let currentThemeName = 'framboise';
+
+  function applyTheme(name){
+    const t = THEME_PRESETS[name] || THEME_PRESETS.framboise;
+    const root = document.documentElement.style;
+    root.setProperty('--cream', t.cream);
+    root.setProperty('--raspberry', t.raspberry);
+    root.setProperty('--raspberry-dark', t.raspberryDark);
+    root.setProperty('--blush', t.blush);
+    root.setProperty('--blush-soft', t.blushSoft);
+    root.setProperty('--plum', t.plum);
+    currentThemeName = name;
+  }
+
+  function renderThemeCards(){
+    const el = document.getElementById('theme-cards');
+    el.innerHTML = Object.keys(THEME_PRESETS).map(key => {
+      const t = THEME_PRESETS[key];
+      const sel = key === currentThemeName ? ' selected' : '';
+      return '<div class="theme-card'+sel+'" onclick="chooseTheme(\''+key+'\')">'+
+        '<div class="dots">'+
+          '<div class="dot" style="background:'+t.cream+';border:1px solid var(--line);"></div>'+
+          '<div class="dot" style="background:'+t.raspberry+';"></div>'+
+          '<div class="dot" style="background:'+t.plum+';"></div>'+
+        '</div>'+
+        '<span>'+t.nom+'</span>'+
+      '</div>';
+    }).join('');
+  }
+
+  async function chooseTheme(name){
+    applyTheme(name);
+    renderThemeCards();
+    await db.collection('utilisatrices').doc(currentUid).set({ theme: name }, { merge: true });
+  }
+
+  async function toggleModeMemere(value){
+    modeMemereActive = value;
+    await db.collection('utilisatrices').doc(currentUid).set({ modeMemere: value }, { merge: true });
+    renderArmoire();
+  }
+
+  function continueFromBienvenue(){
+    showScreen('screen-habillage');
+  }
+
+  // Détermine la phrase à afficher (ordre fixe les 15 premières visites,
+  // puis pioche sans remise une fois la liste épuisée) et met à jour le
+  // compteur + la pioche restante côté compte (propre à chaque utilisatrice).
+  async function runMemereFlow(userDoc){
+    let visitCount = (userDoc.visitCount || 0) + 1;
+    let queue = userDoc.phraseQueue || [];
+    let idx;
+
+    if(visitCount <= MEMERE_PHRASES.length){
+      idx = visitCount - 1;
+    } else {
+      if(queue.length === 0){
+        queue = Array.from({length:MEMERE_PHRASES.length}, (_, i) => i);
+        for(let i = queue.length-1; i>0; i--){
+          const j = Math.floor(Math.random()*(i+1));
+          [queue[i], queue[j]] = [queue[j], queue[i]];
+        }
+      }
+      idx = queue.shift();
+    }
+
+    await db.collection('utilisatrices').doc(currentUid).set({ visitCount, phraseQueue: queue }, { merge: true });
+
+    document.getElementById('memere-phrase').innerHTML = MEMERE_PHRASES[idx];
+    showScreen('screen-bienvenue');
+  }
 
   const DEFAULT_CATEGORIES = ['Coiffures','Hauts','Bas','Chaussures'];
 
@@ -997,7 +1128,8 @@
       return;
     }
 
-    pageLabel.textContent = 'Look ' + (currentLookIndex + 1) + ' / ' + looks.length;
+    const label = (modeMemereActive ? 'Tenues validées par la mère' : 'Look');
+    pageLabel.textContent = label + ' ' + (currentLookIndex + 1) + ' / ' + looks.length;
 
     const look = looks[currentLookIndex];
     const editBtn =
@@ -1689,17 +1821,32 @@
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
     if(id === 'screen-armoire'){ loadLooks().then(renderArmoire); }
-    if(id === 'screen-reglages') renderCategoriesManager();
+    if(id === 'screen-reglages'){ renderCategoriesManager(); renderThemeCards(); }
     if(id === 'screen-trier') renderTrierPlacard();
   }
 
   async function initApp(user, pseudo){
     currentUid = user.uid;
     document.getElementById('habillage-pseudo').textContent = pseudo;
+
+    const userDocSnap = await db.collection('utilisatrices').doc(currentUid).get();
+    const userData = userDocSnap.exists ? userDocSnap.data() : {};
+
+    currentThemeName = userData.theme || 'framboise';
+    applyTheme(currentThemeName);
+
+    modeMemereActive = userData.modeMemere !== false; // activé par défaut
+    document.getElementById('memere-toggle').checked = modeMemereActive;
+
     await ensureDefaultCategories(currentUid);
     await loadCategoriesAndItems(currentUid);
     renderHabillage();
-    showScreen('screen-habillage');
+
+    if(modeMemereActive){
+      await runMemereFlow(userData);
+    } else {
+      showScreen('screen-habillage');
+    }
   }
 
   function logout(){
