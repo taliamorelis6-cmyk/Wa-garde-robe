@@ -484,7 +484,6 @@
     <div class="toggle-row" style="width:100%;">
       <div class="t-text">
         <span>Activé</span>
-        <small>Message d'accueil perso à chaque visite + "Tenues validées par la mère" dans l'armoire</small>
       </div>
       <label class="switch">
         <input type="checkbox" id="memere-toggle" checked onchange="toggleModeMemere(this.checked)">
@@ -674,8 +673,8 @@
 
   const THEME_PRESETS = {
     framboise: { nom:'Framboise', cream:'#FBF6F2', raspberry:'#D42A5D', raspberryDark:'#AD2049', blush:'#F6D7E1', blushSoft:'#FBEAEF', plum:'#3A1526' },
-    sauge:     { nom:'Sauge',     cream:'#F7F7F0', raspberry:'#6B8E63', raspberryDark:'#4F6B49', blush:'#E4EBDD', blushSoft:'#F1F5EC', plum:'#1F2E1C' },
-    bleuNuit:  { nom:'Bleu nuit', cream:'#F3F6FA', raspberry:'#3B6FA0', raspberryDark:'#2A527A', blush:'#DCE8F2', blushSoft:'#EEF4FA', plum:'#142433' }
+    corail:    { nom:'Corail',    cream:'#FBF5EF', raspberry:'#D9552C', raspberryDark:'#B23F1D', blush:'#F7DCC9', blushSoft:'#FCEEE3', plum:'#3A2015' },
+    prune:     { nom:'Prune',     cream:'#F8F4F6', raspberry:'#8E4585', raspberryDark:'#6B2F5A', blush:'#EDDCE8', blushSoft:'#F6ECF2', plum:'#2E1428' }
   };
 
   let modeMemereActive = true;
@@ -1128,7 +1127,7 @@
       return;
     }
 
-    const label = (modeMemereActive ? 'Tenues validées par la mère' : 'Look');
+    const label = (modeMemereActive ? 'Tenues de la mémère' : 'Look');
     pageLabel.textContent = label + ' ' + (currentLookIndex + 1) + ' / ' + looks.length;
 
     const look = looks[currentLookIndex];
