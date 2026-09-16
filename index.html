@@ -314,8 +314,8 @@
     <div class="photo-stack" id="photo-stack"></div>
 
     <div class="bottombar">
-      <div class="icon-btn" onclick="showScreen('screen-armoire')" title="Nombre de catégories (à venir dans les réglages)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4"/><rect x="3" y="10" width="18" height="4"/><rect x="3" y="16" width="18" height="4"/></svg>
+      <div class="icon-btn" onclick="openShuffleModal()" title="Mélanger">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.2" fill="#3A1526"/><circle cx="16" cy="8" r="1.2" fill="#3A1526"/><circle cx="8" cy="16" r="1.2" fill="#3A1526"/><circle cx="16" cy="16" r="1.2" fill="#3A1526"/><circle cx="12" cy="12" r="1.2" fill="#3A1526"/></svg>
       </div>
       <button class="fab" onclick="openAddScreen()" title="Ajouter un vêtement">
         <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -504,6 +504,17 @@
       <button class="cta secondary" style="margin-bottom:8px;" onclick="confirmDeleteChoice('remove-piece')">Garder le(s) look(s), retirer juste la pièce</button>
       <button class="cta" style="background:var(--raspberry-dark); margin-bottom:8px;" onclick="confirmDeleteChoice('delete-looks')">Supprimer le(s) look(s) aussi</button>
       <button class="cta secondary" onclick="closeDeleteModal()">Annuler</button>
+    </div>
+  </div>
+
+  <!-- ============ MELANGE ALEATOIRE ============ -->
+  <div id="shuffle-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(20,8,14,0.55); z-index:9997; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:#fff; border-radius:16px; padding:20px; max-width:320px; width:100%;">
+      <p class="screen-title" style="margin:0 0 10px;">Mélange aléatoire</p>
+      <p class="empty-note" style="padding:0 0 10px; text-align:left;">Décoche les catégories que tu veux garder telles quelles.</p>
+      <div id="shuffle-cat-list" style="display:flex; flex-direction:column; gap:10px; margin-bottom:18px;"></div>
+      <button class="cta" onclick="doShuffle()">Mélanger</button>
+      <button class="cta secondary" style="margin-top:8px;" onclick="closeShuffleModal()">Annuler</button>
     </div>
   </div>
 
@@ -1558,6 +1569,42 @@
 
   function closeDeleteModal(){
     document.getElementById('delete-modal-overlay').style.display = 'none';
+  }
+
+  function openShuffleModal(){
+    const list = document.getElementById('shuffle-cat-list');
+    const visibles = categories.filter(c => c.affichee !== false && (itemsByCategory[c.id] || []).length > 1);
+    if(visibles.length === 0){
+      list.innerHTML = '<p class="empty-note" style="padding:0; text-align:left;">Il te faut au moins 2 pièces dans une catégorie affichée pour pouvoir mélanger.</p>';
+    } else {
+      list.innerHTML = visibles.map(cat =>
+        '<label style="display:flex; align-items:center; gap:10px; font-size:0.85rem; font-weight:500;">'+
+          '<input type="checkbox" checked value="'+cat.id+'" class="shuffle-check" style="width:18px; height:18px;">'+
+          cat.nom +
+        '</label>'
+      ).join('');
+    }
+    document.getElementById('shuffle-modal-overlay').style.display = 'flex';
+  }
+
+  function closeShuffleModal(){
+    document.getElementById('shuffle-modal-overlay').style.display = 'none';
+  }
+
+  function doShuffle(){
+    const checked = Array.from(document.querySelectorAll('.shuffle-check:checked')).map(el => el.value);
+    checked.forEach(catId => {
+      const items = itemsByCategory[catId] || [];
+      if(items.length <= 1) return;
+      const current = indexByCategory[catId] || 0;
+      let newIdx;
+      do {
+        newIdx = Math.floor(Math.random() * items.length);
+      } while(newIdx === current);
+      indexByCategory[catId] = newIdx;
+    });
+    closeShuffleModal();
+    renderHabillage();
   }
 
   async function confirmDeleteChoice(choice){
