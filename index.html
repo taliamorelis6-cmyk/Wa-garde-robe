@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Wa — Ta garde-robe numérique</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#D42A5D">
+<link rel="apple-touch-icon" href="favicon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500;1,9..144,600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
@@ -495,6 +498,9 @@
     <p class="section-title">Thème</p>
     <div id="theme-cards" style="display:flex; gap:10px; width:100%; margin-bottom:6px;"></div>
 
+    <p class="section-title">Icône du site</p>
+    <div id="icon-cards" style="display:flex; gap:10px; width:100%; margin-bottom:6px; flex-wrap:wrap;"></div>
+
     <p class="section-title">Tes catégories</p>
     <div id="categories-list" style="width:100%;"></div>
 
@@ -722,6 +728,43 @@
     applyTheme(name);
     renderThemeCards();
     await db.collection('utilisatrices').doc(currentUid).set({ theme: name }, { merge: true });
+  }
+
+  const ICON_CHOICES = {
+    'favicon.svg':    'Cœur discret',
+    'favicon-7a.svg': 'Liseré framboise',
+    'favicon-2a.svg': 'Plein framboise',
+    'favicon-6c.svg': 'Cœur rosé'
+  };
+  let currentIconFile = 'favicon.svg';
+
+  function applyIcon(file){
+    let link = document.querySelector('link[rel="icon"]');
+    if(!link){
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.type = 'image/svg+xml';
+    link.href = file;
+    currentIconFile = file;
+  }
+
+  function renderIconCards(){
+    const el = document.getElementById('icon-cards');
+    el.innerHTML = Object.keys(ICON_CHOICES).map(file => {
+      const sel = file === currentIconFile ? ' selected' : '';
+      return '<div class="theme-card'+sel+'" style="flex:0 0 72px;" onclick="chooseIcon(\''+file+'\')">'+
+        '<img src="'+file+'" style="width:36px; height:36px; border-radius:8px;" onerror="this.style.display=\'none\'">'+
+        '<span>'+ICON_CHOICES[file]+'</span>'+
+      '</div>';
+    }).join('');
+  }
+
+  async function chooseIcon(file){
+    applyIcon(file);
+    renderIconCards();
+    await db.collection('utilisatrices').doc(currentUid).set({ icone: file }, { merge: true });
   }
 
   async function toggleModeMemere(value){
@@ -1830,7 +1873,7 @@
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
     if(id === 'screen-armoire'){ loadLooks().then(renderArmoire); }
-    if(id === 'screen-reglages'){ renderCategoriesManager(); renderThemeCards(); }
+    if(id === 'screen-reglages'){ renderCategoriesManager(); renderThemeCards(); renderIconCards(); }
     if(id === 'screen-trier') renderTrierPlacard();
   }
 
@@ -1839,55 +1882,4 @@
     document.getElementById('habillage-pseudo').textContent = pseudo;
 
     const userDocSnap = await db.collection('utilisatrices').doc(currentUid).get();
-    const userData = userDocSnap.exists ? userDocSnap.data() : {};
-
-    currentThemeName = userData.theme || 'framboise';
-    applyTheme(currentThemeName);
-
-    modeMemereActive = userData.modeMemere !== false; // activé par défaut
-    document.getElementById('memere-toggle').checked = modeMemereActive;
-
-    await ensureDefaultCategories(currentUid);
-    await loadCategoriesAndItems(currentUid);
-    renderHabillage();
-
-    if(modeMemereActive){
-      await runMemereFlow(userData);
-    } else {
-      showScreen('screen-habillage');
-    }
-  }
-
-  function logout(){
-    auth.signOut();
-  }
-
-  // Ecoute en continu l'état de connexion : bascule automatiquement d'écran,
-  // et reconnecte automatiquement si une session existait déjà.
-  initCropDrag();
-
-  auth.onAuthStateChanged(async (user) => {
-    document.getElementById('btn-submit').disabled = false;
-    if(user){
-      let pseudo = user.email.replace('@wa-app.local', '');
-      try{
-        const doc = await db.collection('utilisatrices').doc(user.uid).get();
-        if(doc.exists && doc.data().pseudo) pseudo = doc.data().pseudo;
-      }catch(e){ /* pas grave si le doc n'existe pas encore */ }
-
-      document.getElementById('screen-accueil').classList.remove('active');
-      await initApp(user, pseudo);
-    } else {
-      currentUid = null;
-      categories = [];
-      itemsByCategory = {};
-      indexByCategory = {};
-      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-      document.getElementById('screen-accueil').classList.add('active');
-      setMsg('', '');
-    }
-  });
-
-</script>
-</body>
-</html>
+    const userData = userDocSnap.exists ? userDocSnap.data() : 
