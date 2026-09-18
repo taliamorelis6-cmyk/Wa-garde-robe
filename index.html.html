@@ -1,0 +1,1937 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wa — Ta garde-robe numérique</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#D42A5D">
+<link rel="apple-touch-icon" href="favicon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500;1,9..144,600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- ============================================================
+     FIREBASE — SDK compat (simple à utiliser sans outils de build)
+     ============================================================ -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --cream:#FBF6F2;
+    --cream-deep:#F3EAE4;
+    --ink:#2B1620;
+    --ink-soft:#6B4C56;
+    --raspberry:#D42A5D;
+    --raspberry-dark:#AD2049;
+    --blush:#F6D7E1;
+    --blush-soft:#FBEAEF;
+    --plum:#3A1526;
+    --line:#E7D9D2;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Work Sans',sans-serif;
+    background:var(--cream);
+    color:var(--ink);
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  .screen{
+    width:360px;
+    max-width:100%;
+    display:none;
+    flex-direction:column;
+  }
+  .screen.active{ display:flex; }
+
+  /* ---- ACCUEIL / AUTH ---- */
+  #screen-accueil{ align-items:center; text-align:center; padding:20px; }
+  .logo{
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    font-weight:600;
+    font-size:4rem;
+    color:var(--raspberry);
+    margin:0;
+    line-height:1;
+  }
+  .tagline{ font-size:0.95rem; color:var(--ink-soft); margin:10px 0 30px; }
+  .auth-toggle{
+    display:flex;
+    background:var(--blush-soft);
+    border-radius:100px;
+    padding:4px;
+    margin-bottom:22px;
+    width:100%;
+  }
+  .auth-toggle button{
+    flex:1;
+    border:none;
+    background:transparent;
+    text-align:center;
+    padding:9px 0;
+    font-family:'Work Sans',sans-serif;
+    font-size:0.85rem;
+    font-weight:600;
+    border-radius:100px;
+    color:var(--ink-soft);
+    cursor:pointer;
+  }
+  .auth-toggle button.on{ background:#fff; color:var(--raspberry-dark); box-shadow:0 2px 6px rgba(58,21,38,0.08);}
+  .field{ width:100%; text-align:left; margin-bottom:14px; }
+  .field label{ display:block; font-size:0.72rem; color:var(--ink-soft); margin-bottom:5px; font-weight:600; }
+  .field input{
+    width:100%; border:1px solid var(--line); background:#fff; border-radius:12px;
+    padding:12px 14px; font-family:'Work Sans',sans-serif; font-size:0.9rem; color:var(--ink);
+  }
+  .field input:focus{ outline:none; border-color:var(--raspberry); }
+  .cta{
+    width:100%; border:none; background:var(--raspberry); color:#fff;
+    font-family:'Work Sans',sans-serif; font-weight:600; font-size:0.95rem;
+    padding:14px; border-radius:12px; margin-top:6px; cursor:pointer;
+  }
+  .cta:disabled{ opacity:0.6; cursor:default; }
+  .cta.secondary{ background:#fff; color:var(--raspberry-dark); border:1px solid var(--line); margin-top:10px; }
+  .msg{ font-size:0.78rem; margin-top:12px; min-height:16px; }
+  .msg.error{ color:var(--raspberry-dark); }
+  .msg.info{ color:var(--ink-soft); }
+
+  /* ---- PLACEHOLDER APRES CONNEXION ---- */
+  #screen-app{ align-items:center; text-align:center; padding:20px; }
+  #screen-app .welcome{
+    font-family:'Fraunces',serif; font-style:italic; font-size:1.3rem; color:var(--plum);
+    margin:16px 0 6px;
+  }
+  #screen-app .pseudo-label{ font-size:0.85rem; color:var(--ink-soft); margin-bottom:24px; }
+  .note-box{
+    background:var(--blush-soft); border-radius:14px; padding:16px; font-size:0.78rem;
+    color:var(--ink-soft); line-height:1.5; text-align:left; margin-bottom:20px;
+  }
+
+  /* ---- APP SHELL (écrans réels après connexion) ---- */
+  .app-shell{ min-height:80vh; width:100%; flex-direction:column; }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; padding:0 0 14px; width:100%; }
+  .icon-btn{
+    width:38px; height:38px; border-radius:50%; background:#fff; border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    box-shadow:0 2px 6px rgba(58,21,38,0.06); flex-shrink:0;
+  }
+  .icon-btn.filled{ background:var(--raspberry); border-color:var(--raspberry); }
+  .icon-btn svg{ width:18px; height:18px; }
+  .screen-title{ font-family:'Fraunces',serif; font-style:italic; font-size:1.1rem; color:var(--plum); }
+
+  .photo-stack{ flex:1; display:flex; flex-direction:column; gap:12px; padding:2px 0; overflow-y:auto; min-height:200px; }
+  .photo-row{ display:flex; align-items:center; gap:8px; }
+  .arrow-side{
+    width:34px; height:34px; border-radius:50%; background:#fff; border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
+    box-shadow:0 2px 6px rgba(58,21,38,0.06);
+  }
+  .arrow-side svg{ width:14px; height:14px; }
+  .photo-frame{
+    flex:1; height:128px; background:var(--blush-soft); border:1px solid var(--line); border-radius:16px;
+    position:relative; display:flex; align-items:center; justify-content:center; overflow:hidden; cursor:pointer;
+  }
+  .photo-frame img{ width:100%; height:100%; object-fit:cover; }
+  .photo-placeholder{ display:flex; flex-direction:column; align-items:center; gap:6px; color:var(--raspberry-dark); opacity:0.65; }
+  .photo-placeholder svg{ width:22px; height:22px; }
+  .photo-placeholder span{ font-size:0.62rem; font-weight:600; text-align:center; padding:0 10px; }
+  .photo-caption{
+    position:absolute; left:8px; bottom:8px; background:rgba(255,255,255,0.9);
+    padding:3px 9px; border-radius:100px; font-size:0.66rem; font-weight:600; color:var(--plum);
+  }
+  .frame-edit-badge{
+    position:absolute; top:6px; right:6px; width:24px; height:24px; border-radius:50%;
+    background:rgba(255,255,255,0.92); display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 5px rgba(58,21,38,0.12);
+  }
+  .frame-edit-badge svg{ width:12px; height:12px; }
+
+  .bottombar{ display:flex; align-items:center; justify-content:space-between; padding:14px 0 0; width:100%; }
+  .fab{
+    width:54px; height:54px; border-radius:50%; background:var(--raspberry); border:none;
+    display:flex; align-items:center; justify-content:center; box-shadow:0 8px 18px rgba(212,42,93,0.4);
+    cursor:pointer; margin-top:-26px;
+  }
+  .fab svg{ width:22px; height:22px; }
+
+  .cat-chip-big{
+    align-self:flex-start; margin:0 0 14px; background:var(--blush-soft); color:var(--raspberry-dark);
+    font-weight:700; font-size:0.8rem; padding:7px 16px; border-radius:100px;
+  }
+  .upload-zone{
+    margin:0 0 14px; border:2px dashed var(--line); border-radius:16px; padding:16px;
+    display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; cursor:pointer;
+    position:relative; overflow:hidden; width:100%;
+  }
+  .upload-zone input[type=file]{ position:absolute; inset:0; opacity:0; cursor:pointer; }
+  .upload-zone img.preview{ max-width:100%; max-height:80px; border-radius:10px; margin-top:4px; }
+  .upload-zone svg{ width:24px; height:24px; }
+  .upload-zone .up-title{ font-weight:700; font-size:0.85rem; }
+  .upload-zone .up-sub{ font-size:0.68rem; color:var(--ink-soft); }
+
+  .empty-note{ text-align:center; color:var(--ink-soft); font-size:0.8rem; padding:20px 10px; line-height:1.5; }
+  .look-count{
+    text-align:center; font-family:'Fraunces',serif; font-style:italic; font-size:1.3rem;
+    color:var(--plum); margin:26px 0 4px;
+  }
+
+  /* ---- GESTION DES CATEGORIES (Réglages) ---- */
+  .section-title{ font-family:'Fraunces',serif; font-style:italic; font-size:1rem; color:var(--plum); margin:18px 0 10px; align-self:flex-start; }
+  .cat-manage-row{
+    display:flex; align-items:center; justify-content:space-between; width:100%;
+    background:#fff; border:1px solid var(--line); border-radius:12px;
+    padding:10px 14px; margin-bottom:8px; font-size:0.85rem; font-weight:500;
+  }
+  .trier-section-title{
+    font-family:'Fraunces',serif; font-style:italic; font-size:0.95rem; color:var(--plum);
+    margin:16px 0 8px; align-self:flex-start;
+  }
+  .vet-row{
+    display:flex; align-items:center; gap:10px; width:100%;
+    background:#fff; border:1px solid var(--line); border-radius:12px;
+    padding:8px 10px; margin-bottom:8px;
+  }
+  .vet-row img{ width:44px; height:44px; object-fit:cover; border-radius:8px; flex-shrink:0; }
+  .vet-row .vet-name{ flex:1; font-size:0.8rem; font-weight:500; color:var(--ink); }
+  .trash-btn{
+    width:30px; height:30px; border-radius:50%; background:var(--blush-soft);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
+  }
+  .trash-btn svg{ width:14px; height:14px; }
+  .switch{ position:relative; width:42px; height:24px; flex-shrink:0; }
+  .switch input{ opacity:0; width:0; height:0; }
+  .switch .slider{ position:absolute; inset:0; background:#E7DAD4; border-radius:100px; cursor:pointer; transition:.2s; }
+  .switch .slider:before{ content:""; position:absolute; height:18px; width:18px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; }
+  .switch input:checked + .slider{ background:var(--raspberry); }
+  .switch input:checked + .slider:before{ transform:translateX(18px); }
+  .toggle-row{ display:flex; align-items:center; justify-content:space-between; padding:2px 0 16px; }
+  .toggle-row .t-text{ display:flex; flex-direction:column; gap:2px; padding-right:10px; }
+  .toggle-row .t-text small{ color:var(--ink-soft); font-weight:400; font-size:0.7rem; line-height:1.3; }
+  .theme-card{
+    flex:1; border:2px solid var(--line); border-radius:14px; padding:10px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; gap:6px; background:#fff;
+  }
+  .theme-card.selected{ border-color:var(--raspberry); }
+  .theme-card .dots{ display:flex; gap:4px; }
+  .theme-card .dot{ width:16px; height:16px; border-radius:50%; }
+  .theme-card span{ font-size:0.68rem; font-weight:600; color:var(--ink-soft); }
+  .reorder-btn{
+    width:26px; height:26px; border-radius:50%; background:var(--blush-soft);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
+  }
+  .reorder-btn svg{ width:12px; height:12px; }
+  .reorder-btn.disabled{ opacity:0.25; pointer-events:none; }
+  .add-cat-row{ display:flex; gap:8px; width:100%; margin-top:6px; }
+  .add-cat-row input{
+    flex:1; border:1px solid var(--line); background:#fff; border-radius:12px;
+    padding:10px 14px; font-family:'Work Sans',sans-serif; font-size:0.85rem;
+  }
+  .add-cat-row button{
+    border:none; background:var(--raspberry); color:#fff; border-radius:12px;
+    padding:0 16px; font-weight:600; cursor:pointer;
+  }
+  select.field-select{
+    width:100%; border:1px solid var(--line); background:#fff; border-radius:12px;
+    padding:12px 14px; font-family:'Work Sans',sans-serif; font-size:0.9rem; color:var(--ink);
+    margin-bottom:14px;
+  }
+
+  /* ---- ARMOIRE (carte magazine) ---- */
+  .counts-row{ display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:14px; width:100%; }
+  .count-chip{ background:var(--blush-soft); color:var(--raspberry-dark); font-size:0.7rem; font-weight:600; padding:5px 10px; border-radius:100px; }
+  .mag-row{ flex:1; display:flex; align-items:center; justify-content:center; gap:10px; width:100%; min-height:0; }
+  .mag-page{
+    position:relative; width:78%; max-width:290px; height:100%; max-height:480px; min-height:340px;
+    background:#fff; border:1px solid var(--line); border-radius:20px;
+    box-shadow:0 12px 28px rgba(58,21,38,0.12); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:14px; padding:20px; overflow:hidden; flex-shrink:1;
+  }
+  .mag-edit-btn{
+    position:absolute; top:12px; right:12px; width:32px; height:32px; border-radius:50%;
+    background:var(--blush-soft); display:flex; align-items:center; justify-content:center; cursor:pointer;
+    z-index:50;
+  }
+  .mag-edit-btn svg{ width:15px; height:15px; }
+
+  /* ---- EDITEUR DE LOOK ---- */
+  #editeur-stage{
+    position:relative; width:280px; height:380px; max-width:100%;
+    background:#fff; border:1px solid var(--line); border-radius:16px; overflow:hidden;
+  }
+  .mode-btn{
+    flex:1; padding:9px 4px; border-radius:10px; border:1px solid var(--line); background:#fff;
+    font-family:'Work Sans',sans-serif; font-size:0.75rem; font-weight:600; color:var(--ink-soft); cursor:pointer;
+  }
+  .mode-btn.active{ background:var(--raspberry); color:#fff; border-color:var(--raspberry); }
+  .mini-btn{
+    flex:1; padding:8px 4px; border-radius:10px; border:1px solid var(--line); background:#fff;
+    font-family:'Work Sans',sans-serif; font-size:0.72rem; font-weight:600; color:var(--ink-soft); cursor:pointer;
+  }
+  .layer-selected-outline{ position:absolute; border:2px dashed var(--raspberry); pointer-events:none; border-radius:4px; }
+  .resize-handle{
+    position:absolute; width:18px; height:18px; background:var(--raspberry); border:2px solid #fff;
+    border-radius:50%; cursor:nwse-resize; box-shadow:0 2px 5px rgba(58,21,38,0.2); touch-action:none;
+  }
+  .mag-composition-wrapper{ position:absolute; top:0; left:0; width:280px; height:380px; transform-origin:top left; }
+  .mag-piece{ display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .mag-piece img{ width:92px; height:92px; object-fit:cover; border-radius:10px; border:1px solid var(--line); }
+  .mag-piece span{ font-size:0.62rem; color:var(--ink-soft); font-weight:600; text-align:center; }
+
+  /* ---- CADRAGE ---- */
+  #crop-viewport img{ display:block; }
+</style>
+</head>
+<body>
+
+  <!-- ============ ECRAN ACCUEIL / CONNEXION-INSCRIPTION ============ -->
+  <div class="screen active" id="screen-accueil">
+    <p class="logo">Wa</p>
+    <p class="tagline">Ta garde-robe, à portée de main</p>
+
+    <div class="auth-toggle">
+      <button id="tab-login" class="on" onclick="switchAuthMode('login')">Se connecter</button>
+      <button id="tab-signup" onclick="switchAuthMode('signup')">Créer un compte</button>
+    </div>
+
+    <div class="field">
+      <label>Pseudo</label>
+      <input type="text" id="input-pseudo" placeholder="ex. lucie.style" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>Mot de passe</label>
+      <input type="password" id="input-password" placeholder="6 caractères minimum" autocomplete="current-password">
+    </div>
+
+    <button class="cta" id="btn-submit" onclick="submitAuth()">Se connecter</button>
+    <p class="msg" id="auth-msg"></p>
+  </div>
+
+  <!-- ============ BIENVENUE (Mode Mémère) ============ -->
+  <div class="screen" id="screen-bienvenue" style="align-items:center; justify-content:center; text-align:center; padding:32px;">
+    <p class="logo" style="font-size:2.6rem;">Wa</p>
+    <p id="memere-phrase" style="font-family:'Fraunces',serif; font-style:italic; font-weight:500; font-size:1.3rem; color:var(--plum); line-height:1.4; margin:14px 0 24px;"></p>
+    <button class="cta" onclick="continueFromBienvenue()">Continuer</button>
+  </div>
+
+  <!-- ============ HABILLAGE ============ -->
+  <div class="screen app-shell" id="screen-habillage">
+    <div class="topbar">
+      <div class="icon-btn" onclick="showScreen('screen-reglages')" title="Réglages">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg>
+      </div>
+      <span class="screen-title" id="habillage-pseudo"></span>
+      <div class="icon-btn filled" onclick="saveLook(this)" title="Enregistrer le look">
+        <svg viewBox="0 0 24 24" fill="#fff" stroke="#fff" stroke-width="1.5"><path d="M12 21s-7.5-4.9-10-9.3C.4 8.3 2 4.5 5.6 4c2-.3 3.9.6 4.9 2.2C11.5 4.6 13.4 3.7 15.4 4c3.6.5 5.2 4.3 3.6 7.7C16.5 16.1 12 21 12 21z"/></svg>
+      </div>
+    </div>
+
+    <div class="photo-stack" id="photo-stack"></div>
+
+    <div class="bottombar">
+      <div class="icon-btn" onpointerdown="shufflePointerDown()" onpointerup="shufflePointerUp()" onpointerleave="shufflePointerCancel()" onpointercancel="shufflePointerCancel()" oncontextmenu="return false;" title="Tap : remélanger — Appui long : choisir les catégories">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.2" fill="#3A1526"/><circle cx="16" cy="8" r="1.2" fill="#3A1526"/><circle cx="8" cy="16" r="1.2" fill="#3A1526"/><circle cx="16" cy="16" r="1.2" fill="#3A1526"/><circle cx="12" cy="12" r="1.2" fill="#3A1526"/></svg>
+      </div>
+      <button class="fab" onclick="openAddScreen()" title="Ajouter un vêtement">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <div class="icon-btn" onclick="showScreen('screen-armoire')" title="Consulter l'armoire">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16"/><path d="M12 4v16"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ AJOUTER UN VETEMENT ============ -->
+  <div class="screen app-shell" id="screen-ajouter">
+    <div class="topbar">
+      <div class="icon-btn" onclick="showScreen('screen-habillage')" title="Retour">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </div>
+      <span class="screen-title">Nouveau vêtement</span>
+      <span style="width:38px;"></span>
+    </div>
+
+    <select class="field-select" id="ajouter-cat-select" onchange="pendingCategoryForAdd = this.value"></select>
+
+    <label class="upload-zone" style="border-color:#D42A5D;">
+      <input type="file" accept="image/*" id="input-photo-portee" onchange="onFileChosen(this,'portee')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#D42A5D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 6l1.5-2h5L16 6"/></svg>
+      <span class="up-title" style="color:#AD2049;">Photo portée</span>
+      <span class="up-sub">Toi qui portes le vêtement — tu pourras la cadrer ensuite</span>
+      <img class="preview" id="preview-portee" style="display:none;">
+    </label>
+
+    <label class="upload-zone">
+      <input type="file" accept="image/*" id="input-photo-plat" onchange="onFileChosen(this,'plat')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 6l1.5-2h5L16 6"/></svg>
+      <span class="up-title">Photo à plat</span>
+      <span class="up-sub">Le vêtement seul, fond uni clair — tu pourras la cadrer ensuite</span>
+      <img class="preview" id="preview-plat" style="display:none;">
+    </label>
+
+    <div class="field">
+      <label>Nom (optionnel)</label>
+      <input type="text" id="input-nom-vetement" placeholder="ex. Chemise blanche">
+    </div>
+
+    <button class="cta" id="btn-ajouter-submit" onclick="submitNewVetement()">Ajouter</button>
+    <p class="msg" id="ajouter-msg"></p>
+  </div>
+
+  <!-- ============ CADRAGE D'UNE PHOTO ============ -->
+  <div class="screen app-shell" id="screen-crop" style="align-items:center;">
+    <div class="topbar">
+      <div class="icon-btn" onclick="cancelCrop()" title="Annuler">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </div>
+      <span class="screen-title">Cadrer la photo</span>
+      <span style="width:38px;"></span>
+    </div>
+
+    <p class="empty-note" style="padding:0 0 14px;">Fais glisser la photo pour la positionner, utilise le curseur pour zoomer.</p>
+
+    <div id="crop-viewport" style="overflow:hidden; position:relative; background:#111; border-radius:14px; touch-action:none; margin-bottom:16px;">
+      <img id="crop-img" style="position:absolute; left:0; top:0; user-select:none; -webkit-user-drag:none; max-width:none;" draggable="false">
+    </div>
+
+    <div style="display:flex; justify-content:space-between; width:100%; font-size:0.65rem; color:var(--ink-soft); margin-bottom:4px;">
+      <span>Tout voir</span><span>Zoomer</span>
+    </div>
+    <input type="range" id="crop-zoom" min="1" max="3" step="0.01" value="1" oninput="onCropZoomChange(this.value)" style="width:100%; margin-bottom:18px;">
+
+    <button class="cta" onclick="validateCrop()">Valider le cadrage</button>
+  </div>
+
+  <!-- ============ ARMOIRE (compteur pour l'instant, magazine à la prochaine étape) ============ -->
+  <div class="screen app-shell" id="screen-armoire" style="align-items:center;">
+    <div class="topbar">
+      <div class="icon-btn" onclick="armoireBack()" title="Retour">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </div>
+      <span class="screen-title">Armoire</span>
+      <span style="width:38px;"></span>
+    </div>
+    <div id="armoire-counts" class="counts-row"></div>
+    <span class="screen-title" id="armoire-page-label" style="margin-bottom:14px;"></span>
+
+    <div class="mag-row">
+      <div class="arrow-side" onclick="cycleLook(-1)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </div>
+      <div id="armoire-stage" class="mag-page"></div>
+      <div class="arrow-side" onclick="cycleLook(1)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ EDITEUR DE LOOK (collage manuel) ============ -->
+  <div class="screen app-shell" id="screen-editeur" style="align-items:center;">
+    <div class="topbar">
+      <div class="icon-btn" onclick="closeEditeur()" title="Retour">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </div>
+      <span class="screen-title">Modifier le look</span>
+      <div class="icon-btn filled" onclick="saveEditeurComposition()" title="Enregistrer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l6 6L20 6"/></svg>
+      </div>
+    </div>
+
+    <p class="empty-note" style="padding:0 0 10px;">Tape une pièce pour la sélectionner, puis choisis un mode ci-dessous.</p>
+
+    <div id="editeur-stage"></div>
+
+    <div id="editeur-toolbar" style="display:none; width:100%; margin-top:14px;">
+      <div style="display:flex; gap:8px; margin-bottom:10px;">
+        <button class="mode-btn active" data-mode="deplacer" onclick="setEditMode('deplacer')">Déplacer</button>
+        <button class="mode-btn" data-mode="gomme" onclick="setEditMode('gomme')">Gomme</button>
+        <button class="mode-btn" data-mode="restaurer" onclick="setEditMode('restaurer')">Restaurer</button>
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:10px;">
+        <button class="mini-btn" onclick="layerZ(1)">Avancer</button>
+        <button class="mini-btn" onclick="layerZ(-1)">Reculer</button>
+        <button class="mini-btn" onclick="removeLayer()">Retirer</button>
+      </div>
+      <label style="font-size:0.7rem; color:var(--ink-soft); font-weight:600;">Taille de la gomme</label>
+      <input type="range" id="brush-size" min="10" max="70" value="28" style="width:100%; margin:6px 0 4px;">
+    </div>
+
+    <button class="cta secondary" style="margin-top:14px;" onclick="openAddLayerPicker()">+ Ajouter une photo</button>
+    <input type="file" accept="image/*" id="input-extra-photo" style="display:none;" onchange="onExtraPhotoChosen(this)">
+
+    <div id="extra-cat-picker" style="display:none; width:100%; margin-top:10px;">
+      <input type="text" class="field-select" id="extra-cat-select" placeholder="Nom (optionnel, ex. Collier)">
+      <button class="cta" onclick="confirmAddLayer()">Ajouter au collage</button>
+      <p class="msg" id="extra-msg"></p>
+    </div>
+  </div>
+
+  <!-- ============ REGLAGES (placeholder pour l'instant) ============ -->
+  <div class="screen app-shell" id="screen-reglages" style="align-items:center;">
+    <div class="topbar">
+      <div class="icon-btn" onclick="showScreen('screen-habillage')" title="Retour">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </div>
+      <span class="screen-title">Réglages</span>
+      <span style="width:38px;"></span>
+    </div>
+    <p class="empty-note" style="padding-bottom:6px;">Choisis les catégories à afficher dans l'habillage, ou ajoutes-en de nouvelles.</p>
+
+    <p class="section-title" style="margin-top:0;">Mode Mémère</p>
+    <div class="toggle-row" style="width:100%;">
+      <div class="t-text">
+        <span>Activé</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="memere-toggle" checked onchange="toggleModeMemere(this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <p class="section-title">Thème</p>
+    <div id="theme-cards" style="display:flex; gap:10px; width:100%; margin-bottom:6px;"></div>
+
+    <p class="section-title">Icône du site</p>
+    <div id="icon-cards" style="display:flex; gap:10px; width:100%; margin-bottom:6px; flex-wrap:wrap;"></div>
+
+    <p class="section-title">Tes catégories</p>
+    <div id="categories-list" style="width:100%;"></div>
+
+    <div class="add-cat-row">
+      <input type="text" id="input-nouvelle-categorie" placeholder="Nouvelle catégorie (ex. Vestes)">
+      <button onclick="ajouterCategorie()">Ajouter</button>
+    </div>
+    <p class="msg" id="categorie-msg"></p>
+
+    <div class="link-row" onclick="showScreen('screen-trier')" style="cursor:pointer;">Trier le placard <span>›</span></div>
+
+    <p class="empty-note">Le thème de couleurs, le Mode Mémère et le reste des réglages arriveront ici à une prochaine étape.</p>
+    <button class="cta secondary" onclick="logout()">Se déconnecter</button>
+  </div>
+
+  <!-- ============ TRIER LE PLACARD (supprimer / réordonner les vêtements) ============ -->
+  <div class="screen app-shell" id="screen-trier" style="align-items:center;">
+    <div class="topbar">
+      <div class="icon-btn" onclick="showScreen('screen-reglages')" title="Retour">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </div>
+      <span class="screen-title">Trier le placard</span>
+      <span style="width:38px;"></span>
+    </div>
+    <p class="empty-note" style="padding-bottom:6px;">Tape une photo pour l'agrandir, ou supprime un vêtement définitivement.</p>
+    <div id="trier-content" style="width:100%; overflow-y:auto;"></div>
+  </div>
+
+  <!-- ============ VISIONNEUSE PLEIN ECRAN ============ -->
+  <div id="lightbox-overlay" onclick="closeLightbox()" style="display:none; position:fixed; inset:0; background:rgba(20,8,14,0.9); z-index:9999; align-items:center; justify-content:center; padding:20px;">
+    <img id="lightbox-img" src="" alt="" style="max-width:100%; max-height:100%; border-radius:12px;">
+  </div>
+
+  <!-- ============ CHOIX AVANT SUPPRESSION (vêtement utilisé dans un look) ============ -->
+  <div id="delete-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(20,8,14,0.55); z-index:9998; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:#fff; border-radius:16px; padding:20px; max-width:320px; width:100%;">
+      <p class="screen-title" style="margin:0 0 10px;">Vêtement utilisé ailleurs</p>
+      <p class="empty-note" style="padding:0 0 12px; text-align:left;" id="delete-modal-text"></p>
+      <div id="delete-modal-looks"></div>
+      <button class="cta secondary" style="margin-bottom:8px;" onclick="confirmDeleteChoice('remove-piece')">Garder le(s) look(s), retirer juste la pièce</button>
+      <button class="cta" style="background:var(--raspberry-dark); margin-bottom:8px;" onclick="confirmDeleteChoice('delete-looks')">Supprimer le(s) look(s) aussi</button>
+      <button class="cta secondary" onclick="closeDeleteModal()">Annuler</button>
+    </div>
+  </div>
+
+  <!-- ============ MELANGE ALEATOIRE ============ -->
+  <div id="shuffle-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(20,8,14,0.55); z-index:9997; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:#fff; border-radius:16px; padding:20px; max-width:320px; width:100%;">
+      <p class="screen-title" style="margin:0 0 10px;">Mélange aléatoire</p>
+      <p class="empty-note" style="padding:0 0 10px; text-align:left;">Décoche les catégories que tu veux garder telles quelles.</p>
+      <div id="shuffle-cat-list" style="display:flex; flex-direction:column; gap:10px; margin-bottom:18px;"></div>
+      <button class="cta" onclick="doShuffle()">Mélanger</button>
+      <button class="cta secondary" style="margin-top:8px;" onclick="closeShuffleModal()">Annuler</button>
+    </div>
+  </div>
+
+<script>
+  // ============================================================
+  // 🔧 A REMPLIR : colle ici le firebaseConfig fourni par la console
+  // Firebase (Paramètres du projet > Vos applications > Web).
+  // Ce sont des identifiants publics, sans risque à laisser dans le code.
+  // ============================================================
+  const firebaseConfig = {
+    apiKey: "AIzaSyAzouCam1IBm2YRyyZcKvSWHrjpjgOEFRM",
+    authDomain: "wa-garde--robe-virtuelle.firebaseapp.com",
+    projectId: "wa-garde--robe-virtuelle",
+    storageBucket: "wa-garde--robe-virtuelle.firebasestorage.app",
+    messagingSenderId: "438425479841",
+    appId: "1:438425479841:web:17af5a3d00e167fad21ee0"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  // Session persistante : reste connectée même après fermeture du navigateur
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+  let authMode = 'login'; // 'login' ou 'signup'
+
+  function switchAuthMode(mode){
+    authMode = mode;
+    document.getElementById('tab-login').classList.toggle('on', mode==='login');
+    document.getElementById('tab-signup').classList.toggle('on', mode==='signup');
+    document.getElementById('btn-submit').textContent = (mode==='login') ? 'Se connecter' : 'Créer mon compte';
+    document.getElementById('auth-msg').textContent = '';
+  }
+
+  // Transforme le pseudo en "faux email" utilisable par Firebase Auth,
+  // pour que l'utilisatrice n'ait jamais à voir/taper d'adresse email.
+  function pseudoToEmail(pseudo){
+    const clean = pseudo.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+    return clean + '@wa-app.local';
+  }
+
+  function setMsg(text, type){
+    const el = document.getElementById('auth-msg');
+    el.textContent = text;
+    el.className = 'msg ' + (type || '');
+  }
+
+  function submitAuth(){
+    const pseudo = document.getElementById('input-pseudo').value.trim();
+    const password = document.getElementById('input-password').value;
+    const btn = document.getElementById('btn-submit');
+
+    if(!pseudo || !password){
+      setMsg('Merci de remplir le pseudo et le mot de passe.', 'error');
+      return;
+    }
+    if(password.length < 6){
+      setMsg('Le mot de passe doit faire au moins 6 caractères.', 'error');
+      return;
+    }
+
+    const email = pseudoToEmail(pseudo);
+    btn.disabled = true;
+    setMsg('Un instant...', 'info');
+
+    const action = (authMode === 'login')
+      ? auth.signInWithEmailAndPassword(email, password)
+      : auth.createUserWithEmailAndPassword(email, password);
+
+    action
+      .then((cred) => {
+        // A l'inscription, on enregistre le pseudo "propre" dans Firestore
+        if(authMode === 'signup'){
+          return db.collection('utilisatrices').doc(cred.user.uid).set({
+            pseudo: pseudo,
+            creeLe: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        }
+      })
+      .catch((err) => {
+        btn.disabled = false;
+        setMsg(traduireErreur(err.code), 'error');
+      });
+  }
+
+  function traduireErreur(code){
+    switch(code){
+      case 'auth/email-already-in-use': return 'Ce pseudo est déjà pris.';
+      case 'auth/invalid-email': return 'Ce pseudo contient des caractères non autorisés.';
+      case 'auth/user-not-found': return 'Aucun compte avec ce pseudo.';
+      case 'auth/wrong-password': return 'Mot de passe incorrect.';
+      case 'auth/invalid-credential': return 'Pseudo ou mot de passe incorrect.';
+      case 'auth/weak-password': return 'Mot de passe trop faible (6 caractères minimum).';
+      default: return "Une erreur est survenue (" + code + ").";
+    }
+  }
+
+  const ARROW_LEFT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>';
+  const ARROW_RIGHT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>';
+  const PLUS_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+  const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l6 6L20 6"/></svg>';
+  const HEART_SVG = '<svg viewBox="0 0 24 24" fill="#fff" stroke="#fff" stroke-width="1.5"><path d="M12 21s-7.5-4.9-10-9.3C.4 8.3 2 4.5 5.6 4c2-.3 3.9.6 4.9 2.2C11.5 4.6 13.4 3.7 15.4 4c3.6.5 5.2 4.3 3.6 7.7C16.5 16.1 12 21 12 21z"/></svg>';
+  const PENCIL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+  const TRASH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#AD2049" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>';
+
+  const MEMERE_PHRASES = [
+    "Bienvenue dans ta garde-robe numérique ma mémère",
+    "Coucou Mémère",
+    "Comment elle va s'habiller aujourd'hui ?",
+    "Qu'importe comment tu t'habilles aujourd'hui, tu seras sublimes !",
+    "Coucou, je t'aime",
+    "Miroir, mon beau miroir qui est la plus belle ?<br>— C'est la mémère bien sûr !",
+    "Mais quelle beauté s'apprête à s'apprêter ?",
+    "En mode sexy chic ou tranquille mais jolie ?",
+    "Jolie Mémère",
+    "Splendide Mémère",
+    "Fabuleuse Mémère",
+    "Fifille t'attends pour un bisous",
+    "Un petit sourire pour égayer cette journée mère ?",
+    "Mais quelle jolie petite dame",
+    "T'es belle maman",
+    "Si tu ne trouves rien à ton goût, c'est qu'il faut malheureusement faire les fripes...",
+    "On fait matchy-matchy ?",
+    "Impose-toi avec style et confiance aujourd'hui !",
+    "Et si tu testais une composition nouvelle aujourd'hui ?",
+    "Une nouvelle coiffure pour cette nouvelle journée ?",
+    "Quand ma baddy maman va-t-elle reporter ses talons ?",
+    "Si t'es pas inspirée aujourd'hui, fais appel à Gigi",
+    "Tu embellirais même un sac poubelle tellement t'es belle !",
+    "Un petit restau où on se fait jolie, ça fait longtemps ! (Je t'invite)<br><span style='font-size:0.65em; font-style:normal;'>*Si les conditions financières me le permettent</span>"
+  ];
+
+  const THEME_PRESETS = {
+    framboise: { nom:'Framboise', cream:'#FBF6F2', raspberry:'#D42A5D', raspberryDark:'#AD2049', blush:'#F6D7E1', blushSoft:'#FBEAEF', plum:'#3A1526' },
+    bleuNuit:  { nom:'Bleu nuit', cream:'#FBF6F2', raspberry:'#1E3A5C', raspberryDark:'#14293F', blush:'#D7E1EA', blushSoft:'#EAF0F5', plum:'#0E1C2B' },
+    prune:     { nom:'Prune',     cream:'#FBF6F2', raspberry:'#8E4585', raspberryDark:'#6B2F5A', blush:'#EDDCE8', blushSoft:'#F6ECF2', plum:'#2E1428' }
+  };
+
+  let modeMemereActive = true;
+  let currentThemeName = 'framboise';
+
+  function applyTheme(name){
+    const t = THEME_PRESETS[name] || THEME_PRESETS.framboise;
+    const root = document.documentElement.style;
+    root.setProperty('--cream', t.cream);
+    root.setProperty('--raspberry', t.raspberry);
+    root.setProperty('--raspberry-dark', t.raspberryDark);
+    root.setProperty('--blush', t.blush);
+    root.setProperty('--blush-soft', t.blushSoft);
+    root.setProperty('--plum', t.plum);
+    currentThemeName = name;
+  }
+
+  function renderThemeCards(){
+    const el = document.getElementById('theme-cards');
+    el.innerHTML = Object.keys(THEME_PRESETS).map(key => {
+      const t = THEME_PRESETS[key];
+      const sel = key === currentThemeName ? ' selected' : '';
+      return '<div class="theme-card'+sel+'" onclick="chooseTheme(\''+key+'\')">'+
+        '<div class="dots">'+
+          '<div class="dot" style="background:'+t.cream+';border:1px solid var(--line);"></div>'+
+          '<div class="dot" style="background:'+t.raspberry+';"></div>'+
+          '<div class="dot" style="background:'+t.plum+';"></div>'+
+        '</div>'+
+        '<span>'+t.nom+'</span>'+
+      '</div>';
+    }).join('');
+  }
+
+  async function chooseTheme(name){
+    applyTheme(name);
+    renderThemeCards();
+    await db.collection('utilisatrices').doc(currentUid).set({ theme: name }, { merge: true });
+  }
+
+  const ICON_CHOICES = {
+    'favicon.svg':    'Cœur discret',
+    'favicon-7a.svg': 'Liseré framboise',
+    'favicon-2a.svg': 'Plein framboise',
+    'favicon-6c.svg': 'Cœur rosé'
+  };
+  let currentIconFile = 'favicon.svg';
+
+  function applyIcon(file){
+    let link = document.querySelector('link[rel="icon"]');
+    if(!link){
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.type = 'image/svg+xml';
+    link.href = file;
+    currentIconFile = file;
+  }
+
+  function renderIconCards(){
+    const el = document.getElementById('icon-cards');
+    el.innerHTML = Object.keys(ICON_CHOICES).map(file => {
+      const sel = file === currentIconFile ? ' selected' : '';
+      return '<div class="theme-card'+sel+'" style="flex:0 0 72px;" onclick="chooseIcon(\''+file+'\')">'+
+        '<img src="'+file+'" style="width:36px; height:36px; border-radius:8px;" onerror="this.style.display=\'none\'">'+
+        '<span>'+ICON_CHOICES[file]+'</span>'+
+      '</div>';
+    }).join('');
+  }
+
+  async function chooseIcon(file){
+    applyIcon(file);
+    renderIconCards();
+    await db.collection('utilisatrices').doc(currentUid).set({ icone: file }, { merge: true });
+  }
+
+  async function toggleModeMemere(value){
+    modeMemereActive = value;
+    await db.collection('utilisatrices').doc(currentUid).set({ modeMemere: value }, { merge: true });
+    renderArmoire();
+  }
+
+  function continueFromBienvenue(){
+    showScreen('screen-habillage');
+  }
+
+  // Détermine la phrase à afficher (ordre fixe les 15 premières visites,
+  // puis pioche sans remise une fois la liste épuisée) et met à jour le
+  // compteur + la pioche restante côté compte (propre à chaque utilisatrice).
+  async function runMemereFlow(userDoc){
+    let visitCount = (userDoc.visitCount || 0) + 1;
+    let queue = userDoc.phraseQueue || [];
+    let idx;
+
+    if(visitCount <= MEMERE_PHRASES.length){
+      idx = visitCount - 1;
+    } else {
+      if(queue.length === 0){
+        queue = Array.from({length:MEMERE_PHRASES.length}, (_, i) => i);
+        for(let i = queue.length-1; i>0; i--){
+          const j = Math.floor(Math.random()*(i+1));
+          [queue[i], queue[j]] = [queue[j], queue[i]];
+        }
+      }
+      idx = queue.shift();
+    }
+
+    await db.collection('utilisatrices').doc(currentUid).set({ visitCount, phraseQueue: queue }, { merge: true });
+
+    document.getElementById('memere-phrase').innerHTML = MEMERE_PHRASES[idx];
+    showScreen('screen-bienvenue');
+  }
+
+  const DEFAULT_CATEGORIES = ['Coiffures','Hauts','Bas','Chaussures'];
+
+  let currentUid = null;
+  let categories = [];        // [{id, nom, ordre}]
+  let itemsByCategory = {};   // catId -> [{id, nom, photoPorteeURL, photoPlatURL}]
+  let indexByCategory = {};   // catId -> index affiché actuellement
+  let pendingCategoryForAdd = null;
+
+  async function ensureDefaultCategories(uid){
+    const snap = await db.collection('utilisatrices').doc(uid).collection('categories').get();
+    if(!snap.empty) return;
+    const batch = db.batch();
+    DEFAULT_CATEGORIES.forEach((nom, i) => {
+      const ref = db.collection('utilisatrices').doc(uid).collection('categories').doc();
+      batch.set(ref, { nom, ordre: i });
+    });
+    await batch.commit();
+  }
+
+  async function loadCategoriesAndItems(uid){
+    const catSnap = await db.collection('utilisatrices').doc(uid).collection('categories').orderBy('ordre').get();
+    categories = catSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+    const itemSnap = await db.collection('utilisatrices').doc(uid).collection('vetements').get();
+    itemsByCategory = {};
+    itemSnap.docs.forEach(d => {
+      const data = { id:d.id, ...d.data() };
+      if(!itemsByCategory[data.categorieId]) itemsByCategory[data.categorieId] = [];
+      itemsByCategory[data.categorieId].push(data);
+    });
+    Object.keys(itemsByCategory).forEach(catId => {
+      itemsByCategory[catId].sort((a,b) => (a.ordre||0) - (b.ordre||0));
+    });
+
+    categories.forEach(c => { if(indexByCategory[c.id] === undefined) indexByCategory[c.id] = 0; });
+  }
+
+  function renderHabillage(){
+    const stack = document.getElementById('photo-stack');
+    stack.innerHTML = '';
+    const visibles = categories.filter(c => c.affichee !== false);
+
+    if(visibles.length === 0){
+      stack.innerHTML = '<p class="empty-note">Aucune catégorie affichée pour l\'instant — va dans Réglages pour en activer ou en créer une.</p>';
+      return;
+    }
+
+    visibles.forEach(cat => {
+      const items = itemsByCategory[cat.id] || [];
+      const idx = indexByCategory[cat.id] || 0;
+      const item = items[idx];
+
+      const row = document.createElement('div');
+      row.className = 'photo-row';
+
+      const leftBtn = document.createElement('div');
+      leftBtn.className = 'arrow-side';
+      leftBtn.innerHTML = ARROW_LEFT_SVG;
+      leftBtn.onclick = () => cycleItem(cat.id, -1);
+
+      const frame = document.createElement('div');
+      frame.className = 'photo-frame';
+      if(item){
+        const slot = item.photoPorteeURL ? 'portee' : 'plat';
+        const url = item.photoPorteeURL || item.photoPlatURL;
+        frame.innerHTML = '<img src="'+url+'" alt=""><div class="frame-edit-badge">'+PENCIL_SVG+'</div>';
+        frame.onclick = () => openEditPhoto(item.id, slot);
+      } else {
+        frame.innerHTML = '<div class="photo-placeholder">'+PLUS_ICON_SVG+'<span>Ajoute une photo dans '+cat.nom+'</span></div>';
+        frame.onclick = () => openAddScreen(cat.id);
+      }
+
+      const rightBtn = document.createElement('div');
+      rightBtn.className = 'arrow-side';
+      rightBtn.innerHTML = ARROW_RIGHT_SVG;
+      rightBtn.onclick = () => cycleItem(cat.id, 1);
+
+      row.appendChild(leftBtn); row.appendChild(frame); row.appendChild(rightBtn);
+      stack.appendChild(row);
+    });
+  }
+
+  function cycleItem(catId, dir){
+    const items = itemsByCategory[catId] || [];
+    if(items.length === 0) return;
+    let idx = indexByCategory[catId] || 0;
+    idx = (idx + dir + items.length) % items.length;
+    indexByCategory[catId] = idx;
+    renderHabillage();
+  }
+
+  const HABILLAGE_RATIO_FALLBACK = 2.3;
+  const PLAT_RATIO = 1;
+
+  function getHabillageFrameRatio(){
+    const sample = document.querySelector('.photo-frame');
+    if(sample){
+      const rect = sample.getBoundingClientRect();
+      if(rect.width > 10 && rect.height > 10) return rect.width / rect.height;
+    }
+    return HABILLAGE_RATIO_FALLBACK;
+  }
+
+  function openAddScreen(catId){
+    pendingCategoryForAdd = catId || (categories[0] && categories[0].id);
+    const select = document.getElementById('ajouter-cat-select');
+    select.innerHTML = categories.map(c =>
+      '<option value="'+c.id+'"'+(c.id===pendingCategoryForAdd ? ' selected' : '')+'>'+c.nom+'</option>'
+    ).join('');
+    document.getElementById('input-photo-portee').value = '';
+    document.getElementById('input-photo-plat').value = '';
+    document.getElementById('input-nom-vetement').value = '';
+    document.getElementById('preview-portee').style.display = 'none';
+    document.getElementById('preview-plat').style.display = 'none';
+    document.getElementById('ajouter-msg').textContent = '';
+    croppedPorteeDataURL = null;
+    croppedPlatDataURL = null;
+    showScreen('screen-ajouter');
+  }
+
+  // ------------------------------------------------------------
+  // CADRAGE — on charge l'image via URL.createObjectURL plutôt que
+  // FileReader : bien plus fiable sur mobile (évite les échecs
+  // aléatoires de lecture rencontrés avec les grosses photos).
+  // ------------------------------------------------------------
+  let pendingCropSlot = null;
+  let croppedPorteeDataURL = null;
+  let croppedPlatDataURL = null;
+  let cropState = {};
+  let editingItemId = null;
+
+  function onFileChosen(input, slot){
+    const file = input.files[0];
+    if(!file) return;
+    editingItemId = null;
+    pendingCropSlot = slot;
+    openCropScreen(file, slot === 'portee' ? getHabillageFrameRatio() : PLAT_RATIO, false);
+  }
+
+  // Recadrer à nouveau une photo déjà enregistrée (tap sur le crayon dans l'Habillage)
+  function openEditPhoto(itemId, slot){
+    const item = getItemById(itemId);
+    if(!item) return;
+    const dataUrl = slot === 'portee' ? item.photoPorteeURL : item.photoPlatURL;
+    if(!dataUrl) return;
+    editingItemId = itemId;
+    pendingCropSlot = slot;
+    openCropScreen(dataUrl, slot === 'portee' ? getHabillageFrameRatio() : PLAT_RATIO, true);
+  }
+
+  function openCropScreen(source, ratio, isExistingDataUrl){
+    const vp = document.getElementById('crop-viewport');
+    const baseW = Math.min(300, window.innerWidth - 80);
+    const w = baseW, h = Math.round(baseW / ratio);
+    vp.style.width = w + 'px';
+    vp.style.height = h + 'px';
+
+    const img = document.getElementById('crop-img');
+    const objectUrl = isExistingDataUrl ? null : URL.createObjectURL(source);
+    const srcToLoad = isExistingDataUrl ? source : objectUrl;
+
+    img.onload = () => {
+      const iw = img.naturalWidth, ih = img.naturalHeight;
+      const containScale = Math.min(w / iw, h / ih); // photo entière visible (peut laisser des marges)
+      const coverScale = Math.max(w / iw, h / ih);   // photo remplit le cadre (peut couper)
+      cropState = {
+        iw, ih, containerW:w, containerH:h, containScale, coverScale, scale:coverScale,
+        dragging:false, lastX:0, lastY:0, objectUrl
+      };
+      cropState.tx = (w - iw*coverScale)/2;
+      cropState.ty = (h - ih*coverScale)/2;
+
+      const zoomEl = document.getElementById('crop-zoom');
+      zoomEl.min = containScale;
+      zoomEl.max = containScale * 4;
+      zoomEl.step = (zoomEl.max - zoomEl.min) / 300;
+      zoomEl.value = coverScale;
+
+      applyCropTransform();
+      showScreen('screen-crop');
+    };
+    img.onerror = () => {
+      if(objectUrl) URL.revokeObjectURL(objectUrl);
+      document.getElementById('ajouter-msg').textContent =
+        "Impossible de charger cette photo (format non supporté ?) — essaie une autre photo.";
+      document.getElementById('ajouter-msg').className = 'msg error';
+    };
+    img.src = srcToLoad;
+  }
+
+  function clampCrop(){
+    const { containerW:w, containerH:h, iw, ih, scale } = cropState;
+    const dispW = iw*scale, dispH = ih*scale;
+
+    // Si la photo est plus petite que le cadre à ce niveau de zoom, on la centre
+    // (marges blanches) plutôt que de forcer un déplacement impossible.
+    cropState.tx = (dispW <= w) ? (w - dispW) / 2 : Math.min(0, Math.max(w - dispW, cropState.tx));
+    cropState.ty = (dispH <= h) ? (h - dispH) / 2 : Math.min(0, Math.max(h - dispH, cropState.ty));
+  }
+
+  function applyCropTransform(){
+    const img = document.getElementById('crop-img');
+    img.style.width = (cropState.iw*cropState.scale)+'px';
+    img.style.height = (cropState.ih*cropState.scale)+'px';
+    img.style.transform = 'translate('+cropState.tx+'px,'+cropState.ty+'px)';
+  }
+
+  function onCropZoomChange(val){
+    cropState.scale = parseFloat(val);
+    clampCrop();
+    applyCropTransform();
+  }
+
+  function initCropDrag(){
+    const vp = document.getElementById('crop-viewport');
+    vp.addEventListener('pointerdown', (e) => {
+      cropState.dragging = true;
+      cropState.lastX = e.clientX;
+      cropState.lastY = e.clientY;
+      vp.setPointerCapture(e.pointerId);
+    });
+    vp.addEventListener('pointermove', (e) => {
+      if(!cropState.dragging) return;
+      cropState.tx += e.clientX - cropState.lastX;
+      cropState.ty += e.clientY - cropState.lastY;
+      cropState.lastX = e.clientX;
+      cropState.lastY = e.clientY;
+      clampCrop();
+      applyCropTransform();
+    });
+    vp.addEventListener('pointerup', () => { cropState.dragging = false; });
+    vp.addEventListener('pointercancel', () => { cropState.dragging = false; });
+  }
+
+  async function validateCrop(){
+    const canvas = document.createElement('canvas');
+    const ratio = cropState.containerW / cropState.containerH;
+    const outW = 800, outH = Math.round(800 / ratio);
+    canvas.width = outW; canvas.height = outH;
+
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff'; // marges propres si la photo ne remplit pas tout le cadre
+    ctx.fillRect(0, 0, outW, outH);
+
+    const sx = -cropState.tx / cropState.scale;
+    const sy = -cropState.ty / cropState.scale;
+    const sw = cropState.containerW / cropState.scale;
+    const sh = cropState.containerH / cropState.scale;
+    ctx.drawImage(document.getElementById('crop-img'), sx, sy, sw, sh, 0, 0, outW, outH);
+    const dataURL = canvas.toDataURL('image/jpeg', 0.75);
+
+    if(cropState.objectUrl) URL.revokeObjectURL(cropState.objectUrl);
+
+    if(editingItemId){
+      // Modification d'une photo déjà enregistrée : on met à jour direct dans Firestore
+      const field = pendingCropSlot === 'portee' ? 'photoPorteeURL' : 'photoPlatURL';
+      const idToUpdate = editingItemId;
+      editingItemId = null;
+      showScreen('screen-habillage');
+      await db.collection('utilisatrices').doc(currentUid).collection('vetements').doc(idToUpdate).update({ [field]: dataURL });
+      await loadCategoriesAndItems(currentUid);
+      renderHabillage();
+      return;
+    }
+
+    if(pendingCropSlot === 'portee'){
+      croppedPorteeDataURL = dataURL;
+      document.getElementById('preview-portee').src = dataURL;
+      document.getElementById('preview-portee').style.display = 'block';
+    } else {
+      croppedPlatDataURL = dataURL;
+      document.getElementById('preview-plat').src = dataURL;
+      document.getElementById('preview-plat').style.display = 'block';
+    }
+    showScreen('screen-ajouter');
+  }
+
+  function cancelCrop(){
+    if(cropState.objectUrl) URL.revokeObjectURL(cropState.objectUrl);
+    const wasEditing = editingItemId;
+    editingItemId = null;
+    if(wasEditing){ showScreen('screen-habillage'); return; }
+    showScreen('screen-ajouter');
+  }
+
+  async function submitNewVetement(){
+    const nom = document.getElementById('input-nom-vetement').value.trim();
+    const msg = document.getElementById('ajouter-msg');
+    const btn = document.getElementById('btn-ajouter-submit');
+
+    if(!croppedPorteeDataURL && !croppedPlatDataURL){
+      msg.textContent = 'Ajoute au moins une photo.';
+      msg.className = 'msg error';
+      return;
+    }
+
+    btn.disabled = true;
+    msg.textContent = 'Enregistrement en cours...';
+    msg.className = 'msg info';
+
+    try{
+      const ref = db.collection('utilisatrices').doc(currentUid).collection('vetements').doc();
+      const data = {
+        categorieId: pendingCategoryForAdd,
+        nom: nom || null,
+        ordre: (itemsByCategory[pendingCategoryForAdd] || []).length,
+        creeLe: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      if(croppedPorteeDataURL) data.photoPorteeURL = croppedPorteeDataURL;
+      if(croppedPlatDataURL) data.photoPlatURL = croppedPlatDataURL;
+
+      await ref.set(data);
+      await loadCategoriesAndItems(currentUid);
+      btn.disabled = false;
+      showScreen('screen-habillage');
+      renderHabillage();
+    }catch(e){
+      btn.disabled = false;
+      msg.textContent = 'Erreur : ' + (e.message || 'quelque chose a mal tourné, réessaie.');
+      msg.className = 'msg error';
+    }
+  }
+
+  async function saveLook(btnEl){
+    const items = {};
+    categories.forEach(cat => {
+      const arr = itemsByCategory[cat.id] || [];
+      const idx = indexByCategory[cat.id] || 0;
+      if(arr[idx]) items[cat.id] = arr[idx].id;
+    });
+    if(Object.keys(items).length === 0) return;
+
+    await db.collection('utilisatrices').doc(currentUid).collection('looks').add({
+      items, creeLe: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    if(btnEl){
+      const original = btnEl.innerHTML;
+      btnEl.innerHTML = CHECK_SVG;
+      setTimeout(() => { btnEl.innerHTML = HEART_SVG; }, 1200);
+    }
+  }
+
+  let looks = [];
+  let currentLookIndex = 0;
+
+  async function loadLooks(){
+    const snap = await db.collection('utilisatrices').doc(currentUid).collection('looks').orderBy('creeLe', 'desc').get();
+    looks = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    if(currentLookIndex >= looks.length) currentLookIndex = 0;
+  }
+
+  function getItemById(itemId){
+    for(const catId in itemsByCategory){
+      const found = (itemsByCategory[catId] || []).find(it => it.id === itemId);
+      if(found) return found;
+    }
+    return null;
+  }
+
+  function renderArmoire(){
+    const countsEl = document.getElementById('armoire-counts');
+    countsEl.innerHTML = categories.map(cat => {
+      const n = (itemsByCategory[cat.id] || []).length;
+      return '<div class="count-chip">'+cat.nom+' · '+n+'</div>';
+    }).join('');
+
+    const pageLabel = document.getElementById('armoire-page-label');
+    const stage = document.getElementById('armoire-stage');
+
+    if(looks.length === 0){
+      pageLabel.textContent = '';
+      stage.innerHTML = '<p class="empty-note" style="padding:0;">Aucun look enregistré pour l\'instant — retourne dans l\'Habillage et appuie sur le cœur pour en sauvegarder un.</p>';
+      return;
+    }
+
+    const label = (modeMemereActive ? 'Tenues de la mémère' : 'Look');
+    pageLabel.textContent = label + ' ' + (currentLookIndex + 1) + ' / ' + looks.length;
+
+    const look = looks[currentLookIndex];
+    const editBtn =
+      '<div class="mag-edit-btn" onclick="openEditeurLook()" title="Outils du look">'+
+        '<svg viewBox="0 0 24 24" fill="none" stroke="#AD2049" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>'+
+      '</div>';
+
+    if(look.composition && Object.keys(look.composition).length){
+      const keys = Object.keys(look.composition).sort((a,b) => look.composition[a].z - look.composition[b].z);
+      const layersHtml = keys.map(k => {
+        const c = look.composition[k];
+        return '<img src="'+c.imageURL+'" style="position:absolute; left:'+c.x+'px; top:'+c.y+'px; width:'+c.width+'px; height:'+c.height+'px;">';
+      }).join('');
+      stage.innerHTML = editBtn + '<div class="mag-composition-wrapper" id="mag-comp-wrapper">'+layersHtml+'</div>';
+      requestAnimationFrame(() => {
+        const wrapper = document.getElementById('mag-comp-wrapper');
+        if(!wrapper) return;
+        const s = Math.min(stage.clientWidth/280, stage.clientHeight/380);
+        wrapper.style.transform = 'scale('+s+')';
+      });
+      return;
+    }
+
+    const pieces = categories.map(cat => {
+      const itemId = look.items ? look.items[cat.id] : undefined;
+      if(!itemId) return '';
+      const item = getItemById(itemId);
+      if(!item) return '';
+      const url = item.photoPlatURL || item.photoPorteeURL;
+      return '<div class="mag-piece"><img src="'+url+'" alt=""><span>'+cat.nom+'</span></div>';
+    }).join('');
+
+    stage.innerHTML = editBtn + pieces;
+  }
+
+  // ============================================================
+  // EDITEUR DE LOOK — collage manuel (calques déplaçables/
+  // redimensionnables, gomme/restaurer, superposition, ajout libre)
+  // ============================================================
+  let editorLayers = [];
+  let editorSelected = -1;
+  let editorMode = 'deplacer';
+  let editorLookId = null;
+  let editorDragging = null;
+  let pendingExtraFile = null;
+
+  // Construit un calque à partir de deux images : la photo intacte (origImg,
+  // jamais modifiée) et la version de travail actuelle (workImg, avec les
+  // gommages déjà faits). Le "masque" garde en mémoire ce qui est visible ou
+  // pas ; le canvas affiché est recalculé à partir de l'original + du masque,
+  // ce qui évite tout empilement de bords adoucis (source des anneaux).
+  function buildLayer(key, label, origImg, workImg, targetLong, savedPos){
+    let baseW, baseH;
+    if(origImg.naturalWidth >= origImg.naturalHeight){
+      baseW = targetLong; baseH = Math.round(targetLong * origImg.naturalHeight / origImg.naturalWidth);
+    } else {
+      baseH = targetLong; baseW = Math.round(targetLong * origImg.naturalWidth / origImg.naturalHeight);
+    }
+
+    const origCanvas = document.createElement('canvas');
+    origCanvas.width = baseW; origCanvas.height = baseH;
+    origCanvas.getContext('2d').drawImage(origImg, 0, 0, baseW, baseH);
+
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = baseW; maskCanvas.height = baseH;
+    const mctx = maskCanvas.getContext('2d');
+    if(workImg){
+      mctx.drawImage(workImg, 0, 0, baseW, baseH); // hérite exactement des gommages déjà faits
+    } else {
+      mctx.fillStyle = '#fff';
+      mctx.fillRect(0, 0, baseW, baseH);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = baseW; canvas.height = baseH;
+
+    const layer = { key, label, canvas, origCanvas, maskCanvas, baseW, baseH,
+      x: savedPos ? savedPos.x : 24, y: savedPos ? savedPos.y : 24,
+      scale: savedPos ? savedPos.scale : 0.85
+    };
+    redrawWorkingCanvas(layer);
+    return layer;
+  }
+
+  // Recompose le canvas affiché = photo d'origine, découpée par le masque.
+  function redrawWorkingCanvas(layer){
+    const ctx = layer.canvas.getContext('2d');
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.clearRect(0, 0, layer.baseW, layer.baseH);
+    ctx.drawImage(layer.origCanvas, 0, 0);
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(layer.maskCanvas, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  function loadImagePromise(src){
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  function openEditeurLook(){
+    const look = looks[currentLookIndex];
+    if(!look) return;
+    editorLookId = look.id;
+    editorSelected = -1;
+    editorMode = 'deplacer';
+
+    const comp = look.composition || null;
+    const catsInLook = categories.filter(c => look.items && look.items[c.id]);
+
+    const piecePromises = catsInLook.map((cat, i) => {
+      const item = getItemById(look.items[cat.id]);
+      const originalUrl = item ? (item.photoPlatURL || item.photoPorteeURL) : null;
+      if(!originalUrl) return Promise.resolve(null);
+      const saved = comp && comp[cat.id];
+      const workingUrl = saved ? saved.imageURL : null;
+
+      const loads = [loadImagePromise(originalUrl)];
+      if(workingUrl) loads.push(loadImagePromise(workingUrl));
+
+      return Promise.all(loads).then(([origImg, workImg]) => {
+        return buildLayer(cat.id, cat.nom, origImg, workImg || null, 220, {
+          x: saved ? saved.x : 24 + i*16,
+          y: saved ? saved.y : 24 + i*16,
+          scale: saved ? saved.width / 220 : 0.85
+        });
+      }).catch(() => null);
+    });
+
+    const extraKeys = comp ? Object.keys(comp).filter(k => k.indexOf('extra_') === 0) : [];
+    const extraPromises = extraKeys.map(k => {
+      const c = comp[k];
+      const originalUrl = c.originalURL || c.imageURL; // repli si ancien format sans originalURL
+      return Promise.all([loadImagePromise(originalUrl), loadImagePromise(c.imageURL)])
+        .then(([origImg, workImg]) => {
+          return buildLayer(k, c.label || 'Autre', origImg, workImg, 200, { x:c.x, y:c.y, scale:c.width/200 });
+        }).catch(() => null);
+    });
+
+    Promise.all(piecePromises.concat(extraPromises)).then(results => {
+      editorLayers = results.filter(Boolean);
+      renderEditorStage();
+      showScreen('screen-editeur');
+    });
+  }
+
+  function renderEditorStage(){
+    const stage = document.getElementById('editeur-stage');
+    stage.innerHTML = '';
+    editorLayers.forEach((layer, idx) => {
+      const c = layer.canvas;
+      c.style.position = 'absolute';
+      c.style.left = layer.x + 'px';
+      c.style.top = layer.y + 'px';
+      c.style.width = (layer.baseW*layer.scale) + 'px';
+      c.style.height = (layer.baseH*layer.scale) + 'px';
+      c.style.zIndex = idx;
+      c.style.touchAction = 'none';
+      c.onpointerdown = (e) => onLayerPointerDown(e, idx);
+      stage.appendChild(c);
+
+      if(idx === editorSelected){
+        const outline = document.createElement('div');
+        outline.className = 'layer-selected-outline';
+        outline.id = 'editor-outline';
+        outline.style.left = layer.x + 'px';
+        outline.style.top = layer.y + 'px';
+        outline.style.width = (layer.baseW*layer.scale) + 'px';
+        outline.style.height = (layer.baseH*layer.scale) + 'px';
+        outline.style.zIndex = 500;
+        stage.appendChild(outline);
+
+        const handle = document.createElement('div');
+        handle.className = 'resize-handle';
+        handle.id = 'editor-handle';
+        handle.style.left = (layer.x + layer.baseW*layer.scale - 9) + 'px';
+        handle.style.top = (layer.y + layer.baseH*layer.scale - 9) + 'px';
+        handle.style.zIndex = 501;
+        handle.onpointerdown = (e) => { e.stopPropagation(); onResizeHandleDown(e, idx); };
+        stage.appendChild(handle);
+      }
+    });
+    document.getElementById('editeur-toolbar').style.display = editorSelected >= 0 ? 'block' : 'none';
+  }
+
+  // Met juste à jour les positions/tailles déjà à l'écran, sans recréer les
+  // éléments DOM — évite de "perdre" le doigt/la souris pendant un glisser.
+  function updateLayerDOM(idx){
+    const layer = editorLayers[idx];
+    const c = layer.canvas;
+    c.style.left = layer.x + 'px';
+    c.style.top = layer.y + 'px';
+    c.style.width = (layer.baseW*layer.scale) + 'px';
+    c.style.height = (layer.baseH*layer.scale) + 'px';
+
+    if(idx === editorSelected){
+      const outline = document.getElementById('editor-outline');
+      const handle = document.getElementById('editor-handle');
+      if(outline){
+        outline.style.left = layer.x + 'px';
+        outline.style.top = layer.y + 'px';
+        outline.style.width = (layer.baseW*layer.scale) + 'px';
+        outline.style.height = (layer.baseH*layer.scale) + 'px';
+      }
+      if(handle){
+        handle.style.left = (layer.x + layer.baseW*layer.scale - 9) + 'px';
+        handle.style.top = (layer.y + layer.baseH*layer.scale - 9) + 'px';
+      }
+    }
+  }
+
+  function selectLayer(idx){
+    editorSelected = idx;
+    renderEditorStage();
+  }
+
+  function onLayerPointerDown(e, idx){
+    e.preventDefault();
+    selectLayer(idx);
+    if(editorMode === 'deplacer'){
+      editorDragging = { type:'move', idx, startX:e.clientX, startY:e.clientY, origX:editorLayers[idx].x, origY:editorLayers[idx].y };
+    } else {
+      const p = canvasPoint(e, editorLayers[idx]);
+      editorDragging = { type:'paint', idx, lastX:p.x, lastY:p.y };
+      paintStroke(idx, p.x, p.y, p.x, p.y);
+    }
+    e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId);
+  }
+
+  function canvasPoint(e, layer){
+    const rect = layer.canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * (layer.canvas.width / rect.width),
+      y: (e.clientY - rect.top) * (layer.canvas.height / rect.height)
+    };
+  }
+
+  // Trace un segment continu (et non des points isolés) entre deux positions,
+  // pour la gomme comme pour la restauration — évite l'effet "pointillés".
+  function paintStroke(idx, x1, y1, x2, y2){
+    const layer = editorLayers[idx];
+    const mctx = layer.maskCanvas.getContext('2d');
+    const brush = parseInt(document.getElementById('brush-size').value, 10);
+
+    mctx.lineCap = 'round';
+    mctx.lineJoin = 'round';
+    mctx.lineWidth = brush;
+
+    if(editorMode === 'gomme'){
+      mctx.globalCompositeOperation = 'destination-out';
+      mctx.beginPath();
+      mctx.moveTo(x1, y1);
+      mctx.lineTo(x2, y2);
+      mctx.stroke();
+      mctx.beginPath();
+      mctx.arc(x1, y1, brush/2, 0, Math.PI*2);
+      mctx.fill();
+      mctx.globalCompositeOperation = 'source-over';
+    } else if(editorMode === 'restaurer'){
+      mctx.globalCompositeOperation = 'source-over';
+      mctx.strokeStyle = '#ffffff';
+      mctx.fillStyle = '#ffffff';
+      mctx.beginPath();
+      mctx.moveTo(x1, y1);
+      mctx.lineTo(x2, y2);
+      mctx.stroke();
+      mctx.beginPath();
+      mctx.arc(x1, y1, brush/2, 0, Math.PI*2);
+      mctx.fill();
+    }
+
+    redrawWorkingCanvas(layer);
+  }
+
+  function onResizeHandleDown(e, idx){
+    editorDragging = { type:'resize', idx, startX:e.clientX, origW: editorLayers[idx].baseW*editorLayers[idx].scale };
+    e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId);
+  }
+
+  window.addEventListener('pointermove', (e) => {
+    if(!editorDragging) return;
+    const layer = editorLayers[editorDragging.idx];
+    if(!layer) return;
+    if(editorDragging.type === 'move'){
+      layer.x = editorDragging.origX + (e.clientX - editorDragging.startX);
+      layer.y = editorDragging.origY + (e.clientY - editorDragging.startY);
+      updateLayerDOM(editorDragging.idx);
+    } else if(editorDragging.type === 'resize'){
+      const newW = Math.max(30, editorDragging.origW + (e.clientX - editorDragging.startX));
+      layer.scale = newW / layer.baseW;
+      updateLayerDOM(editorDragging.idx);
+    } else if(editorDragging.type === 'paint'){
+      const p = canvasPoint(e, layer);
+      paintStroke(editorDragging.idx, editorDragging.lastX, editorDragging.lastY, p.x, p.y);
+      editorDragging.lastX = p.x;
+      editorDragging.lastY = p.y;
+    }
+  });
+  window.addEventListener('pointerup', () => { editorDragging = null; });
+  window.addEventListener('pointercancel', () => { editorDragging = null; });
+
+  function setEditMode(mode){
+    editorMode = mode;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  }
+
+  function layerZ(dir){
+    if(editorSelected < 0) return;
+    const newIdx = editorSelected + dir;
+    if(newIdx < 0 || newIdx >= editorLayers.length) return;
+    const tmp = editorLayers[editorSelected];
+    editorLayers[editorSelected] = editorLayers[newIdx];
+    editorLayers[newIdx] = tmp;
+    editorSelected = newIdx;
+    renderEditorStage();
+  }
+
+  function removeLayer(){
+    if(editorSelected < 0) return;
+    editorLayers.splice(editorSelected, 1);
+    editorSelected = -1;
+    renderEditorStage();
+  }
+
+  function openAddLayerPicker(){
+    document.getElementById('input-extra-photo').click();
+  }
+
+  function onExtraPhotoChosen(input){
+    const file = input.files[0];
+    if(!file) return;
+    pendingExtraFile = file;
+    document.getElementById('extra-cat-select').value = '';
+    document.getElementById('extra-cat-picker').style.display = 'block';
+  }
+
+  function confirmAddLayer(){
+    const label = document.getElementById('extra-cat-select').value.trim() || 'Autre';
+    const file = pendingExtraFile;
+    const msg = document.getElementById('extra-msg');
+    if(!file){
+      msg.textContent = "Choisis d'abord une photo.";
+      msg.className = 'msg error';
+      return;
+    }
+    msg.textContent = '';
+    const objectUrl = URL.createObjectURL(file);
+    loadImagePromise(objectUrl).then(img => {
+      const layer = buildLayer('extra_'+Date.now(), label, img, null, 180, { x:50, y:50, scale:0.9 });
+      editorLayers.push(layer);
+      URL.revokeObjectURL(objectUrl);
+      document.getElementById('extra-cat-picker').style.display = 'none';
+      document.getElementById('input-extra-photo').value = '';
+      selectLayer(editorLayers.length - 1);
+    }).catch(() => {
+      URL.revokeObjectURL(objectUrl);
+      msg.textContent = "Impossible de charger cette photo (format non supporté ?) — essaie une autre photo.";
+      msg.className = 'msg error';
+    });
+  }
+
+  function closeEditeur(){
+    showScreen('screen-armoire');
+  }
+
+  async function saveEditeurComposition(){
+    const look = looks[currentLookIndex];
+    const prevComp = (look && look.composition) || {};
+    const composition = {};
+    editorLayers.forEach((layer, idx) => {
+      const entry = {
+        imageURL: layer.canvas.toDataURL('image/png'),
+        x: layer.x, y: layer.y,
+        width: layer.baseW*layer.scale, height: layer.baseH*layer.scale,
+        z: idx, label: layer.label
+      };
+      if(layer.key.indexOf('extra_') === 0){
+        // La photo pristine d'une photo supplémentaire n'est enregistrée
+        // qu'une seule fois, jamais réécrite ensuite — sinon "Restaurer"
+        // n'aurait plus rien à récupérer après une 2e modification.
+        entry.originalURL = (prevComp[layer.key] && prevComp[layer.key].originalURL)
+          || layer.origCanvas.toDataURL('image/png');
+      }
+      composition[layer.key] = entry;
+    });
+    await db.collection('utilisatrices').doc(currentUid).collection('looks').doc(editorLookId).update({ composition });
+    await loadLooks();
+    showScreen('screen-armoire');
+    renderArmoire();
+  }
+
+  function cycleLook(dir){
+    if(looks.length === 0) return;
+    currentLookIndex = (currentLookIndex + dir + looks.length) % looks.length;
+    renderArmoire();
+  }
+
+  const CHEVRON_UP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg>';
+  const CHEVRON_DOWN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#3A1526" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>';
+
+  function renderCategoriesManager(){
+    const list = document.getElementById('categories-list');
+    list.innerHTML = '';
+    categories.forEach((cat, idx) => {
+      const row = document.createElement('div');
+      row.className = 'cat-manage-row';
+      const checked = cat.affichee !== false ? 'checked' : '';
+      row.innerHTML =
+        '<span style="flex:1;">'+cat.nom+'</span>'+
+        '<div style="display:flex; gap:4px; margin-right:10px;">'+
+          '<div class="reorder-btn'+(idx===0 ? ' disabled' : '')+'" onclick="moveCategorie(\''+cat.id+'\', -1)">'+CHEVRON_UP_SVG+'</div>'+
+          '<div class="reorder-btn'+(idx===categories.length-1 ? ' disabled' : '')+'" onclick="moveCategorie(\''+cat.id+'\', 1)">'+CHEVRON_DOWN_SVG+'</div>'+
+        '</div>'+
+        '<label class="switch">'+
+          '<input type="checkbox" '+checked+' onchange="toggleCategorieAffichee(\''+cat.id+'\', this.checked)">'+
+          '<span class="slider"></span>'+
+        '</label>';
+      list.appendChild(row);
+    });
+  }
+
+  async function moveCategorie(catId, dir){
+    const idx = categories.findIndex(c => c.id === catId);
+    const swapIdx = idx + dir;
+    if(swapIdx < 0 || swapIdx >= categories.length) return;
+
+    const a = categories[idx], b = categories[swapIdx];
+    const batch = db.batch();
+    const colRef = db.collection('utilisatrices').doc(currentUid).collection('categories');
+    batch.update(colRef.doc(a.id), { ordre: b.ordre });
+    batch.update(colRef.doc(b.id), { ordre: a.ordre });
+    await batch.commit();
+
+    await loadCategoriesAndItems(currentUid);
+    renderCategoriesManager();
+    renderHabillage();
+  }
+
+  async function toggleCategorieAffichee(catId, value){
+    await db.collection('utilisatrices').doc(currentUid).collection('categories').doc(catId).update({ affichee: value });
+    const cat = categories.find(c => c.id === catId);
+    if(cat) cat.affichee = value;
+    renderHabillage();
+  }
+
+  async function ajouterCategorie(){
+    const input = document.getElementById('input-nouvelle-categorie');
+    const msg = document.getElementById('categorie-msg');
+    const nom = input.value.trim();
+    if(!nom){
+      msg.textContent = 'Donne un nom à la catégorie.';
+      msg.className = 'msg error';
+      return;
+    }
+    await db.collection('utilisatrices').doc(currentUid).collection('categories').add({
+      nom, ordre: categories.length, affichee: true
+    });
+    input.value = '';
+    msg.textContent = '';
+    await loadCategoriesAndItems(currentUid);
+    renderCategoriesManager();
+    renderHabillage();
+  }
+
+  function renderTrierPlacard(){
+    const content = document.getElementById('trier-content');
+    content.innerHTML = '';
+
+    categories.forEach(cat => {
+      const items = itemsByCategory[cat.id] || [];
+      const title = document.createElement('p');
+      title.className = 'trier-section-title';
+      title.textContent = cat.nom + ' (' + items.length + ')';
+      content.appendChild(title);
+
+      if(items.length === 0){
+        const empty = document.createElement('p');
+        empty.className = 'empty-note';
+        empty.style.padding = '0 0 6px';
+        empty.style.textAlign = 'left';
+        empty.textContent = 'Rien ici pour l\'instant.';
+        content.appendChild(empty);
+        return;
+      }
+
+      items.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'vet-row';
+        const url = item.photoPorteeURL || item.photoPlatURL;
+        row.innerHTML =
+          '<img src="'+url+'" alt="" onclick="openLightbox(\''+url+'\')" style="cursor:zoom-in;">'+
+          '<span class="vet-name">'+(item.nom || 'Sans nom')+'</span>'+
+          '<div class="trash-btn" onclick="deleteVetement(\''+item.id+'\',\''+cat.nom+'\')" title="Supprimer">'+TRASH_SVG+'</div>';
+        content.appendChild(row);
+      });
+    });
+
+    if(categories.every(c => (itemsByCategory[c.id] || []).length === 0)){
+      content.innerHTML = '<p class="empty-note">Ta garde-robe est vide pour l\'instant.</p>';
+    }
+  }
+
+  function openLightbox(url){
+    document.getElementById('lightbox-img').src = url;
+    document.getElementById('lightbox-overlay').style.display = 'flex';
+  }
+  function closeLightbox(){
+    document.getElementById('lightbox-overlay').style.display = 'none';
+  }
+
+  let pendingDeleteItemId = null;
+  let pendingDeleteAffectedLooks = [];
+  let armoireBackTarget = 'screen-habillage';
+  let reopenDeleteModalOnBack = false;
+
+  async function deleteVetement(itemId, catNom){
+    const item = getItemById(itemId);
+    const label = item && item.nom ? item.nom : ('ce vêtement dans ' + catNom);
+
+    await loadLooks(); // s'assurer d'avoir la liste la plus à jour avant de vérifier
+    const affected = looks.filter(l => l.items && Object.values(l.items).includes(itemId));
+
+    if(affected.length === 0){
+      if(!confirm('Supprimer ' + label + ' ? Cette action est définitive.')) return;
+      await db.collection('utilisatrices').doc(currentUid).collection('vetements').doc(itemId).delete();
+      await loadCategoriesAndItems(currentUid);
+      renderTrierPlacard();
+      renderHabillage();
+      return;
+    }
+
+    pendingDeleteItemId = itemId;
+    pendingDeleteAffectedLooks = affected;
+
+    document.getElementById('delete-modal-text').textContent =
+      label + ' est utilisé dans ' + affected.length + (affected.length > 1 ? ' looks enregistrés. ' : ' look enregistré. ') +
+      'Que veux-tu faire ?';
+
+    document.getElementById('delete-modal-looks').innerHTML = affected.map(l => {
+      const idx = looks.findIndex(x => x.id === l.id);
+      return '<button class="mini-btn" style="width:100%; margin-bottom:6px;" onclick="previewLookFromDelete('+idx+')">Voir ce look (n°'+(idx+1)+')</button>';
+    }).join('');
+
+    document.getElementById('delete-modal-overlay').style.display = 'flex';
+  }
+
+  function previewLookFromDelete(idx){
+    closeDeleteModal();
+    currentLookIndex = idx;
+    armoireBackTarget = 'screen-trier';
+    reopenDeleteModalOnBack = true;
+    showScreen('screen-armoire');
+  }
+
+  function armoireBack(){
+    const target = armoireBackTarget;
+    const reopen = reopenDeleteModalOnBack;
+    armoireBackTarget = 'screen-habillage';
+    reopenDeleteModalOnBack = false;
+    showScreen(target);
+    if(reopen && pendingDeleteItemId){
+      document.getElementById('delete-modal-overlay').style.display = 'flex';
+    }
+  }
+
+  function closeDeleteModal(){
+    document.getElementById('delete-modal-overlay').style.display = 'none';
+  }
+
+  let lastShuffleCategoryIds = null;
+  let shuffleLongPressTimer = null;
+  let shuffleLongPressTriggered = false;
+
+  function shufflePointerDown(){
+    shuffleLongPressTriggered = false;
+    shuffleLongPressTimer = setTimeout(() => {
+      shuffleLongPressTriggered = true;
+      openShuffleModal();
+    }, 450);
+  }
+  function shufflePointerUp(){
+    clearTimeout(shuffleLongPressTimer);
+    if(!shuffleLongPressTriggered) quickShuffle();
+  }
+  function shufflePointerCancel(){
+    clearTimeout(shuffleLongPressTimer);
+  }
+
+  function eligibleShuffleCatIds(){
+    return categories.filter(c => c.affichee !== false && (itemsByCategory[c.id] || []).length > 1).map(c => c.id);
+  }
+
+  function quickShuffle(){
+    let ids = lastShuffleCategoryIds;
+    if(!ids || ids.length === 0){
+      ids = eligibleShuffleCatIds();
+    }
+    // on retire celles qui ne seraient plus valables (catégorie cachée/supprimée depuis)
+    ids = ids.filter(id => eligibleShuffleCatIds().includes(id));
+    if(ids.length === 0){ openShuffleModal(); return; }
+    applyShuffle(ids);
+  }
+
+  function applyShuffle(ids){
+    ids.forEach(catId => {
+      const items = itemsByCategory[catId] || [];
+      if(items.length <= 1) return;
+      const current = indexByCategory[catId] || 0;
+      let newIdx;
+      do {
+        newIdx = Math.floor(Math.random() * items.length);
+      } while(newIdx === current);
+      indexByCategory[catId] = newIdx;
+    });
+    renderHabillage();
+  }
+
+  function openShuffleModal(){
+    const list = document.getElementById('shuffle-cat-list');
+    const visibles = categories.filter(c => c.affichee !== false && (itemsByCategory[c.id] || []).length > 1);
+    if(visibles.length === 0){
+      list.innerHTML = '<p class="empty-note" style="padding:0; text-align:left;">Il te faut au moins 2 pièces dans une catégorie affichée pour pouvoir mélanger.</p>';
+    } else {
+      list.innerHTML = visibles.map(cat => {
+        const wasChecked = lastShuffleCategoryIds ? lastShuffleCategoryIds.includes(cat.id) : true;
+        return '<label style="display:flex; align-items:center; gap:10px; font-size:0.85rem; font-weight:500;">'+
+          '<input type="checkbox" '+(wasChecked ? 'checked' : '')+' value="'+cat.id+'" class="shuffle-check" style="width:18px; height:18px;">'+
+          cat.nom +
+        '</label>';
+      }).join('');
+    }
+    document.getElementById('shuffle-modal-overlay').style.display = 'flex';
+  }
+
+  function closeShuffleModal(){
+    document.getElementById('shuffle-modal-overlay').style.display = 'none';
+  }
+
+  function doShuffle(){
+    const checked = Array.from(document.querySelectorAll('.shuffle-check:checked')).map(el => el.value);
+    lastShuffleCategoryIds = checked;
+    closeShuffleModal();
+    applyShuffle(checked);
+  }
+
+  async function confirmDeleteChoice(choice){
+    const itemId = pendingDeleteItemId;
+    const affected = pendingDeleteAffectedLooks;
+    closeDeleteModal();
+    if(!itemId) return;
+
+    const looksCol = db.collection('utilisatrices').doc(currentUid).collection('looks');
+
+    if(choice === 'delete-looks'){
+      const batch = db.batch();
+      affected.forEach(l => batch.delete(looksCol.doc(l.id)));
+      await batch.commit();
+    } else if(choice === 'remove-piece'){
+      const batch = db.batch();
+      affected.forEach(l => {
+        const newItems = Object.assign({}, l.items);
+        const removedCatIds = [];
+        Object.keys(newItems).forEach(catId => {
+          if(newItems[catId] === itemId){ delete newItems[catId]; removedCatIds.push(catId); }
+        });
+        const update = { items: newItems };
+        if(l.composition){
+          const newComp = Object.assign({}, l.composition);
+          removedCatIds.forEach(catId => { if(newComp[catId]) delete newComp[catId]; });
+          update.composition = newComp;
+        }
+        batch.update(looksCol.doc(l.id), update);
+      });
+      await batch.commit();
+    }
+
+    await db.collection('utilisatrices').doc(currentUid).collection('vetements').doc(itemId).delete();
+    await loadCategoriesAndItems(currentUid);
+    await loadLooks();
+    renderTrierPlacard();
+    renderHabillage();
+  }
+
+  function showScreen(id){
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    if(id === 'screen-armoire'){ loadLooks().then(renderArmoire); }
+    if(id === 'screen-reglages'){ renderCategoriesManager(); renderThemeCards(); renderIconCards(); }
+    if(id === 'screen-trier') renderTrierPlacard();
+  }
+
+  async function initApp(user, pseudo){
+    currentUid = user.uid;
+    document.getElementById('habillage-pseudo').textContent = pseudo;
+
+    const userDocSnap = await db.collection('utilisatrices').doc(currentUid).get();
+    const userData = userDocSnap.exists ? userDocSnap.data() : {};
+
+    currentThemeName = userData.theme || 'framboise';
+    applyTheme(currentThemeName);
+
+    modeMemereActive = userData.modeMemere !== false; // activé par défaut
+    applyIcon(userData.icone || 'favicon.svg');
+    document.getElementById('memere-toggle').checked = modeMemereActive;
+
+    await ensureDefaultCategories(currentUid);
+    await loadCategoriesAndItems(currentUid);
+    renderHabillage();
+
+    if(modeMemereActive){
+      await runMemereFlow(userData);
+    } else {
+      showScreen('screen-habillage');
+    }
+  }
+
+  function logout(){
+    auth.signOut();
+  }
+
+  // Ecoute en continu l'état de connexion : bascule automatiquement d'écran,
+  // et reconnecte automatiquement si une session existait déjà.
+  initCropDrag();
+
+  auth.onAuthStateChanged(async (user) => {
+    document.getElementById('btn-submit').disabled = false;
+    if(user){
+      let pseudo = user.email.replace('@wa-app.local', '');
+      try{
+        const doc = await db.collection('utilisatrices').doc(user.uid).get();
+        if(doc.exists && doc.data().pseudo) pseudo = doc.data().pseudo;
+      }catch(e){ /* pas grave si le doc n'existe pas encore */ }
+
+      document.getElementById('screen-accueil').classList.remove('active');
+      await initApp(user, pseudo);
+    } else {
+      currentUid = null;
+      categories = [];
+      itemsByCategory = {};
+      indexByCategory = {};
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById('screen-accueil').classList.add('active');
+      setMsg('', '');
+    }
+  });
+
+</script>
+</body>
+</html>
